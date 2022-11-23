@@ -16,7 +16,7 @@ def transition_density(x, mu, sigma):
     return dist.pdf(x)
 
 
-def posterior_density(data, theta):
+def joint_posterior_density(data, theta):
     """Compute posterior density given params theta and data"""
     pi_list = []
     n_groups = len(data['group'].unique())
@@ -38,34 +38,27 @@ def hastings_ratio(proposed, current, data):
     """Compute hastings ratio given current, proposed and data"""
     q_curr_prop = transition_density(current, proposed, sigma=1)
     q_prop_curr = transition_density(proposed, current, sigma=1)
-    pi_curr = posterior_density(data, current)
-    pi_prop = posterior_density(data, proposed)
+    pi_curr = joint_posterior_density(data, current)
+    pi_prop = joint_posterior_density(data, proposed)
 
     return (pi_prop/pi_curr) * (q_curr_prop/q_prop_curr)
 
 
-def beta_reparameterization(mu, sigma_sq):
-    """Reparameterize beta in terms of mean and variance"""
-    alpha = (((1-mu)/sigma_sq) - (1/mu))*(mu**2)
-    beta = alpha*((1/mu) - 1)
-    return alpha, beta
-
-
-def proposal_sampler(current):
+def proposal_sampler(current, step_size):
     """Sample from proposed distributions q centered at current"""
     # proposed = [np.random.normal(current[i]) for i in range(n_params)]
-    sigma_sq = np.random.normal(np.sqrt(current[0]))**2
-    alpha, beta = beta_reparameterization(current[1], 0.005)
-    tau = np.random.beta(alpha, beta)
-    mu1 = np.random.normal(current[2])
-    mu2 = np.random.normal(current[3])
-    gam1 = np.random.normal(current[4])
-    gam2 = np.random.normal(current[5])
+    num_params = len(current)
+    while True:
+        randomness = np.random.normal(0, 1, num_params)
+        proposal = current + np.multiply(step_size, randomness)
 
-    return [sigma_sq, tau, mu1, mu2, gam1, gam2]
+        if proposal[0] > 0 and (proposal[1] >= 0 and proposal[1] <= 1):
+            break
+    # print(proposal)
+    return proposal
 
 
-def metropolis_hastings(data, n_samples):
+def metropolis_hastings(data, n_samples, step_size):
     """Implement MH sampling methodology"""
     current = [1, 0.5, 0, 0, 0, 0]
     samples = [current]
@@ -74,7 +67,7 @@ def metropolis_hastings(data, n_samples):
     while it < n_samples:
         it += 1
 
-        proposed = proposal_sampler(current)
+        proposed = proposal_sampler(current, step_size)
         h_ratio = hastings_ratio(proposed, current, data)
         # print(h_ratio)
         accept_prob = min(1, h_ratio)
@@ -97,12 +90,14 @@ if __name__ == '__main__':
 
     infile = sys.argv[1]
 
-    np.random.seed(0)
-    n_samples = 100
+    np.random.seed(42)
+    step_size = np.ones(6)*0.05
+    n_samples = 1000
+    burn_in = 200
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
-    samples = metropolis_hastings(data, n_samples)
 
-    generate_traceplots(samples, prefix='mh_')
-    generate_posterior_histograms(samples, prefix='mh_')
+    samples = metropolis_hastings(data, n_samples, step_size)
+    generate_traceplots(samples[burn_in:], prefix='mh_')
+    generate_posterior_histograms(samples[burn_in:], prefix='mh_')
