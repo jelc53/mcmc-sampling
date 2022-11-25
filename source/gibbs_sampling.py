@@ -16,14 +16,14 @@ def sample_tau_conditional_posterior(data, theta):
     mu = np.array([theta[2], theta[3]])
     gam = np.array([theta[4], theta[5]])
 
+    # check bounds
+    if (gam - mu).all() == 0:
+        return tau
+
     # compute mean, std
     yi_4 = fetch_data_for_group(data, group_id=4)
     mean = np.sum(np.divide(yi_4 - gam, (mu - gam)))
     std = sigma_sq / np.sum(gam - mu)
-
-    # check bounds
-    if std <= 0:
-        return tau
 
     return np.random.normal(mean, std)
 
@@ -52,10 +52,6 @@ def sample_mu_conditional_posterior(data, theta):
     mean = (np.sum(mu_1) + np.sum(mu_3) + np.sum(mu_4)) / denom
     std = sigma_sq / denom
 
-    # check bounds
-    if std <= 0:
-        return mu
-
     return np.random.normal(mean, std)
 
 
@@ -82,10 +78,6 @@ def sample_gam_conditional_posterior(data, theta):
     denom = 1*4 + (0.5-1)**2*8 + (tau-1)**2*8  # TODO: not sure about this
     mean = (np.sum(gam_2) + np.sum(gam_3) + np.sum(gam_4)) / denom
     std = sigma_sq / denom
-
-    # check bounds
-    if std <= 0:
-        return gam
 
     return np.random.normal(mean, std)
 
