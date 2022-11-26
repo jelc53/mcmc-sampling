@@ -23,10 +23,9 @@ def sample_sigma_sq_conditional_posterior(data, theta):
     for j in range(1,num_groups+1):
         yi_j = fetch_data_for_group(data, group_id=j)
         mean.append(np.repeat(mu.reshape(2,1), yi_j.shape[0], axis=1).T)
-    # scale = 0.5 * np.sum(data[['X1', 'X2']]-np.vstack(mean), axis=0)
-    scale = 1
+    scale = 0.5 * np.sum(np.power(np.linalg.norm(data[['X1', 'X2']]-np.vstack(mean), ord=2, axis=1), 2))
 
-    return scale * invgamma.rvs(num_data_points + 2)
+    return scale * invgamma.rvs(num_data_points)  # n + 2?
 
 
 def sample_tau_conditional_posterior(data, theta):
@@ -133,7 +132,7 @@ def gibbs_sampling(data, n_samples):
     current = [1, 0.5, 0, 0, 0, 0]
     samples = [current]
 
-    it = 0
+    it = -1
     while it < n_samples:  # num_samples * num_params
         it += 1
         idx = it % 4  # systematic

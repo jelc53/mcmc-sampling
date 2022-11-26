@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
     np.random.seed(42)
     step_size = np.ones(6)*0.05
-    n_samples = 1000
+    n_samples = 5000
     burn_in = 200
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
