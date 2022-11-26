@@ -22,6 +22,7 @@ def sample_sigma_sq_conditional_posterior(data, theta):
     mean = []
     for j in range(1,num_groups+1):
         yi_j = fetch_data_for_group(data, group_id=j)
+        mean_j = #TODO! 
         mean.append(np.repeat(mu.reshape(2,1), yi_j.shape[0], axis=1).T)
     scale = 0.5 * np.sum(np.power(np.linalg.norm(data[['X1', 'X2']]-np.vstack(mean), ord=2, axis=1), 2))
 
