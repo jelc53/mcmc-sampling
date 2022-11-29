@@ -3,6 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def log_normal(x, mu=0, sigma=1):
+
+    mu = np.ones_like(x) * mu
+    numerator = np.exp(-1*((x-mu)**2)/(2*sigma**2))
+    denominator = sigma * np.sqrt(2*np.pi)
+
+    return np.sum(np.log(numerator/denominator))
+
+
 def generate_traceplots(samples, prefix=''):
     """Create and save traceplots for each parameter from sampling algorithm"""
     n_samples = len(samples)-1
@@ -72,6 +81,40 @@ def fetch_param_for_group(theta, group_id):
         mu = theta[1]*np.array([theta[2], theta[3]]) + (1-theta[1])*np.array([theta[4], theta[5]])
 
     return mu, theta[0]*np.eye(2)
+
+
+def center_data(mu, gam, tau, data):
+    """Apply hierarchical logic to center data given theta"""
+
+    means_a = np.repeat(mu, 4, axis=0)  # [4,  2]
+    means_b = np.repeat(gam, 4, axis=0)
+    means_c = 0.5 * np.repeat(means_a, 2, axis=0) + 0.5 * np.repeat(means_b, 2, axis=0)
+    means_d = tau * np.repeat(means_a, 2, axis=0) + (1 - tau) * np.repeat(means_b, 2, axis=0)
+    means = np.vstack((means_a, means_b, means_c, means_d))  # [24, 2]
+    centered_data = data[['X1', 'X2']] - means  # [24, 2]
+
+    return centered_data
+
+
+def negative_log_likelihood(theta, data):
+    """Compute negative log likelihood evaluated at a given theta"""
+    n, k = data.shape
+
+    sigma_sq = theta[0]
+    tau = theta[1]
+    mu = theta[2:4].reshape(1, -1)
+    gam = theta[4:].reshape(1, -1)
+
+    # center data
+    centered_data = center_data(mu, gam, tau, data)  # [24, 2]
+
+    # compute log likelihood
+    norm_term = (n*k*0.5) * np.log(2*np.pi)
+    sigma_term = (n + 1) * np.log(sigma_sq) # [1, 1]
+    posterior = centered_data @ centered_data.T  # [24, 24]
+    posterior = norm_term + sigma_term + (0.5/sigma_sq) * np.trace(posterior)
+
+    return posterior
 
 
 def beta_reparameterization(mu, sigma_sq):
