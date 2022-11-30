@@ -33,19 +33,19 @@ def sample_tau_conditional_posterior(data, theta):
     gam = np.array([theta[4], theta[5]])
 
     # check bounds
-    if (gam - mu).all() == 0:
+    if (gam - mu).any() == 0:  # all()?
         return tau
 
     # compute mean, std
     n_4 = data[data['group'] == 4].shape[0]
     yi_4 = fetch_data_for_group(data, group_id=4)
     mean_vec = np.array(np.divide((yi_4 - gam), (mu - gam)))
-    mean = np.sum([np.sum(mean_vec[i]) for i in range(len(mean_vec))])/n_4
+    mean = np.sum([np.sum(mean_vec[i]) for i in range(len(mean_vec))]) / n_4
     std = (sigma_sq / (n_4*np.linalg.norm(gam-mu, 2)**2))
 
     # sample truncated normal
     a = (0-mean) / std
-    b = (1-mean)/std
+    b = (1-mean) / std
     proposal_tau = truncnorm.rvs(a, b, loc=mean, scale=std)
 
     return proposal_tau
@@ -60,25 +60,25 @@ def sample_mu_conditional_posterior(data, theta):
 
     # group 1
     yi_1 = fetch_data_for_group(data, group_id=1)
+    mean_1 = np.array(yi_1)
     n_1 = len(yi_1)
     alpha_1 = 1
-    mean_1 = np.array(yi_1)
 
     # group 3
     yi_3 = fetch_data_for_group(data, group_id=3)
-    n_3 = len(yi_3)
-    alpha_3 = (1 / 0.5**2)
     mean_3 = np.array(2*yi_3 - gam)
+    n_3 = len(yi_3)
+    alpha_3 = 0.5**2
 
     # group 4
     yi_4 = fetch_data_for_group(data, group_id=4)
-    n_4 = len(yi_4)
-    alpha_4 = (1 / tau**2)
     mean_4 = np.array((yi_4 - (1-tau)*gam) / tau)
+    n_4 = len(yi_4)
+    alpha_4 = tau**2
 
     # compute mean, std
-    w_134 = (1/alpha_1)*n_1 + (1/alpha_3)*n_3 + (alpha_4)*n_4
-    mean = np.sum([(1/alpha_1)*np.sum(mean_1, axis=0), (1/alpha_3)*np.sum(mean_3, axis=0), (1/alpha_4)*np.sum(mean_4, axis=0)], axis=0) / w_134
+    w_134 = alpha_1*n_1 + alpha_3*n_3 + alpha_4*n_4
+    mean = np.sum([alpha_1*np.sum(mean_1, axis=0), alpha_3*np.sum(mean_3, axis=0), alpha_4*np.sum(mean_4, axis=0)], axis=0) / w_134
     std = sigma_sq / w_134 * np.eye(2)
 
     return np.random.multivariate_normal(mean, std)
@@ -92,27 +92,29 @@ def sample_gam_conditional_posterior(data, theta):
     # gam = np.array([theta[4], theta[5]])
 
     # group 2
-    yi_2 = fetch_data_for_group(data, group_id=2)
+    yi_2 = fetch_data_for_group(data, group_id=1)
     mean_2 = np.array(yi_2)
-    std_2 = sigma_sq * np.eye(2)
+    n_2 = len(yi_2)
+    alpha_2 = 1
 
     # group 3
     yi_3 = fetch_data_for_group(data, group_id=3)
-    mean_3 = np.array(2*yi_3 - mu)
-    std_3 = 4*sigma_sq * np.eye(2)
+    mean_3 = np.array((yi_3 - 0.5*mu)/0.5)
+    n_3 = len(yi_3)
+    alpha_3 = 0.5**2
 
     # group 4
     yi_4 = fetch_data_for_group(data, group_id=4)
-    mean_4 = np.array((yi_4 - tau*mu) / (1 - tau))
-    std_4 = (sigma_sq / (1-tau)**2) * np.eye(2)
+    mean_4 = np.array((yi_4 - tau*mu) / (1-tau))
+    n_4 = len(yi_4)
+    alpha_4 = (1-tau)**2
 
-    # # compute mean, std
-    # denom = 1*4 + (0.5-1)**2*8 + (tau-1)**2*8  # TODO: not sure about this
-    # mean = (np.sum(mean_2, axis=0) + np.sum(mean_3 * (0.5-1)**2, axis=0) + np.sum(mean_4 * (tau-1)**2, axis=0)) / denom
-    # std = (sigma_sq / denom) * np.eye(2)
+    # compute mean, std
+    w_234 = alpha_2*n_2 + alpha_3*n_3 + alpha_4*n_4
+    mean = np.sum([alpha_2*np.sum(mean_2, axis=0), alpha_3*np.sum(mean_3, axis=0), alpha_4*np.sum(mean_4, axis=0)], axis=0) / w_234
+    std = sigma_sq / w_234 * np.eye(2)
 
-    return np.prod(np.vstack(multi_dim_samples), axis=0)
-    # return np.random.multivariate_normal(mean, std)
+    return np.random.multivariate_normal(mean, std)
 
 
 def gibbs_sampling(data, n_samples, initial_position):
@@ -165,7 +167,6 @@ if __name__ == '__main__':
 
     np.random.seed(42)
     initial_position = [1, 0.5, 0, 0, 0, 0]
-    # step_size = np.ones(6)*0.05
     n_samples = 5000
     burn_in = 200
 
