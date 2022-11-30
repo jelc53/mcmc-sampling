@@ -5,10 +5,9 @@ import time
 import numpy as np
 import pandas as pd
 
-import statsmodels.api as sm
-from scipy.stats import invgamma
-# from common import fetch_data_for_group, fetch_param_for_group
-from common import fetch_data_for_group, fetch_param_for_group, generate_traceplots, generate_posterior_histograms
+from scipy.stats import truncnorm, invgamma
+from common import fetch_data_for_group, fetch_param_for_group
+from common import generate_traceplots, generate_posterior_histograms
 
 
 def sample_sigma_sq_conditional_posterior(data, theta):
@@ -38,23 +37,22 @@ def sample_tau_conditional_posterior(data, theta):
         return tau
 
     # compute mean, std
-    n_4 = data[['X1', 'X2']]
+    n_4 = data[data['group'] == 4].shape[0]
     yi_4 = fetch_data_for_group(data, group_id=4)
-    mean = np.array(np.divide((yi_4 - gam), (mu - gam)))
-    alpha = np.sum([np.sum(mean[i]) for i in range(len(mean))])
-    std = (sigma_sq / np.linalg.norm(gam-mu, 2)**2)
+    mean_vec = np.array(np.divide((yi_4 - gam), (mu - gam)))
+    mean = np.sum([np.sum(mean_vec[i]) for i in range(len(mean_vec))])/n_4
+    std = (sigma_sq / (n_4*np.linalg.norm(gam-mu, 2)**2))
 
-    # sampling
-    multi_dim_samples = np.array([np.random.multivariate_normal(mean[i], std) for i in range(yi_4.shape[0])])
-    multi_dim_joint_sample = np.prod(np.vstack(multi_dim_samples), axis=0)
+    # sample truncated normal
+    a = (0-mean) / std
+    b = (1-mean)/std
+    proposal_tau = truncnorm.rvs(a, b, loc=mean, scale=std)
 
-    return multi_dim_joint_sample.mean()  # is this the right way to combine?
+    return proposal_tau
 
 
 def sample_mu_conditional_posterior(data, theta):
     """Sample from mu|theta[-1] conditional posterior"""
-    multi_dim_samples = []
-
     tau = theta[1]
     sigma_sq = theta[0]
     # mu = np.array([theta[2], theta[3]])
@@ -62,38 +60,32 @@ def sample_mu_conditional_posterior(data, theta):
 
     # group 1
     yi_1 = fetch_data_for_group(data, group_id=1)
+    n_1 = len(yi_1)
+    alpha_1 = 1
     mean_1 = np.array(yi_1)
-    std_1 = sigma_sq * np.eye(2)
-    multi_dim_samples_1 = np.array([np.random.multivariate_normal(mean_1[i], std_1) for i in range(yi_1.shape[0])])
-    multi_dim_samples.append(multi_dim_samples_1)
 
     # group 3
     yi_3 = fetch_data_for_group(data, group_id=3)
+    n_3 = len(yi_3)
+    alpha_3 = (1 / 0.5**2)
     mean_3 = np.array(2*yi_3 - gam)
-    std_3 = (sigma_sq / 0.5**2) * np.eye(2)
-    multi_dim_samples_3 = np.array([np.random.multivariate_normal(mean_3[i], std_3) for i in range(yi_3.shape[0])])
-    multi_dim_samples.append(multi_dim_samples_3)
 
     # group 4
     yi_4 = fetch_data_for_group(data, group_id=4)
+    n_4 = len(yi_4)
+    alpha_4 = (1 / tau**2)
     mean_4 = np.array((yi_4 - (1-tau)*gam) / tau)
-    std_4 = (sigma_sq / tau**2) * np.eye(2)
-    multi_dim_samples_4 = np.array([np.random.multivariate_normal(mean_4[i], std_4) for i in range(yi_4.shape[0])])
-    multi_dim_samples.append(multi_dim_samples_4)
 
     # compute mean, std
-    # denom = 1*4 + 0.5**2*8 + tau**2*8  # TODO: not sure about this!
-    # mean = (np.sum(mean_1, axis=0) + np.sum(mean_3, axis=0) + np.sum(mean_4, axis=0)) / denom
-    # std = (sigma_sq / denom) * np.eye(2)
+    w_134 = (1/alpha_1)*n_1 + (1/alpha_3)*n_3 + (alpha_4)*n_4
+    mean = np.sum([(1/alpha_1)*np.sum(mean_1, axis=0), (1/alpha_3)*np.sum(mean_3, axis=0), (1/alpha_4)*np.sum(mean_4, axis=0)], axis=0) / w_134
+    std = sigma_sq / w_134 * np.eye(2)
 
-    return np.prod(np.vstack(multi_dim_samples), axis=0)
-    # return np.random.multivariate_normal(mean, std)
+    return np.random.multivariate_normal(mean, std)
 
 
 def sample_gam_conditional_posterior(data, theta):
     """Sample from gam|theta[-1] conditional posterior"""
-    multi_dim_samples = []
-
     tau = theta[1]
     sigma_sq = theta[0]
     mu = np.array([theta[2], theta[3]])
@@ -103,22 +95,16 @@ def sample_gam_conditional_posterior(data, theta):
     yi_2 = fetch_data_for_group(data, group_id=2)
     mean_2 = np.array(yi_2)
     std_2 = sigma_sq * np.eye(2)
-    multi_dim_samples_2 = np.array([np.random.multivariate_normal(mean_2[i], std_2) for i in range(yi_2.shape[0])])
-    multi_dim_samples.append(multi_dim_samples_2)
 
     # group 3
     yi_3 = fetch_data_for_group(data, group_id=3)
     mean_3 = np.array(2*yi_3 - mu)
     std_3 = 4*sigma_sq * np.eye(2)
-    multi_dim_samples_3 = np.array([np.random.multivariate_normal(mean_3[i], std_3) for i in range(yi_3.shape[0])])
-    multi_dim_samples.append(multi_dim_samples_3)
 
     # group 4
     yi_4 = fetch_data_for_group(data, group_id=4)
     mean_4 = np.array((yi_4 - tau*mu) / (1 - tau))
     std_4 = (sigma_sq / (1-tau)**2) * np.eye(2)
-    multi_dim_samples_4 = np.array([np.random.multivariate_normal(mean_4[i], std_4) for i in range(yi_4.shape[0])])
-    multi_dim_samples.append(multi_dim_samples_4)
 
     # # compute mean, std
     # denom = 1*4 + (0.5-1)**2*8 + (tau-1)**2*8  # TODO: not sure about this
