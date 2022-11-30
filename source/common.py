@@ -1,6 +1,9 @@
 import os
+import math
 import numpy as np
 import matplotlib.pyplot as plt
+
+from scipy.stats import multivariate_normal
 
 
 def log_normal(x, mu=0, sigma=1):
@@ -60,6 +63,43 @@ def generate_posterior_histograms(samples, prefix=''):
     #     plt.show(); plt.close()
 
 
+def negative_log_prob(data, theta):
+    """Compute negative log probability evaluated at a given theta"""
+    n, k = data[['X1', 'X2']].shape
+    sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
+    mu = np.array([mu1, mu2])
+    gam = np.array([gam1, gam2])
+
+    # center data
+    centered_data = center_data(mu, gam, tau, data)
+
+    # compute log likelihood
+    norm_term = (n*k*0.5) * np.log(2*math.pi)
+    sigma_term = (n + 1) * np.log(sigma_sq)
+    posterior_term = np.sum(np.power(np.linalg.norm(centered_data, ord=2, axis=1), 2))
+    output = norm_term + sigma_term + (0.5/sigma_sq)*posterior_term
+
+    return output
+
+
+def joint_posterior_density(data, theta):
+    """Compute posterior density given params theta and data"""
+    pi_list = []
+    n_groups = len(data['group'].unique())
+
+    for i in range(1, n_groups+1):
+        mu, sigma = fetch_param_for_group(theta, group_id=i)
+        x_grp = fetch_data_for_group(data, group_id=i)
+        n_data_points = x_grp.shape[0]
+
+        for j in range(n_data_points):
+            x = np.array(x_grp[j:j+1])
+            dist = multivariate_normal(mean=mu, cov=sigma)
+            pi_list.append(dist.pdf(x))
+
+    return np.prod(pi_list)*(1/theta[0])
+
+
 def fetch_data_for_group(data, group_id):
     """Helper function to fetch gene expressions within specified group"""
     filtered_data = data[data['group'] == group_id].copy()
@@ -69,52 +109,31 @@ def fetch_data_for_group(data, group_id):
 def fetch_param_for_group(theta, group_id):
     """Helper function to fetch parameters for specified gene group"""
     if group_id == 1:
-        mu = np.array([theta[2], theta[3]])
+        mean = np.array([theta[2], theta[3]])
 
     if group_id == 2:
-        mu = np.array([theta[4], theta[5]])
+        mean = np.array([theta[4], theta[5]])
 
     if group_id == 3:
-        mu = 0.5*np.array([theta[2], theta[3]]) + 0.5*np.array([theta[4], theta[5]])
+        mean = 0.5*np.array([theta[2], theta[3]]) + 0.5*np.array([theta[4], theta[5]])
 
     if group_id == 4:
-        mu = theta[1]*np.array([theta[2], theta[3]]) + (1-theta[1])*np.array([theta[4], theta[5]])
+        mean = theta[1]*np.array([theta[2], theta[3]]) + (1-theta[1])*np.array([theta[4], theta[5]])
 
-    return mu, theta[0]*np.eye(2)
+    return mean, theta[0]*np.eye(2)
 
 
 def center_data(mu, gam, tau, data):
     """Apply hierarchical logic to center data given theta"""
 
-    means_a = np.repeat(mu, 4, axis=0)  # [4,  2]
-    means_b = np.repeat(gam, 4, axis=0)
-    means_c = 0.5 * np.repeat(means_a, 2, axis=0) + 0.5 * np.repeat(means_b, 2, axis=0)
-    means_d = tau * np.repeat(means_a, 2, axis=0) + (1 - tau) * np.repeat(means_b, 2, axis=0)
-    means = np.vstack((means_a, means_b, means_c, means_d))  # [24, 2]
-    centered_data = data[['X1', 'X2']] - means  # [24, 2]
+    means_a = np.repeat(mu, 4).reshape(-1,2)
+    means_b = np.repeat(gam, 4).reshape(-1,2)
+    means_c = 0.5 * np.repeat(mu, 8).reshape(-1,2) + 0.5 * np.repeat(gam, 8).reshape(-1,2)
+    means_d = tau * np.repeat(mu, 8).reshape(-1,2) + (1 - tau) * np.repeat(gam, 8).reshape(-1,2)
+    means = np.vstack((means_a, means_b, means_c, means_d))
+    centered_data = data[['X1', 'X2']] - means
 
     return centered_data
-
-
-def negative_log_likelihood(theta, data):
-    """Compute negative log likelihood evaluated at a given theta"""
-    n, k = data.shape
-
-    sigma_sq = theta[0]
-    tau = theta[1]
-    mu = theta[2:4].reshape(1, -1)
-    gam = theta[4:].reshape(1, -1)
-
-    # center data
-    centered_data = center_data(mu, gam, tau, data)  # [24, 2]
-
-    # compute log likelihood
-    norm_term = (n*k*0.5) * np.log(2*np.pi)
-    sigma_term = (n + 1) * np.log(sigma_sq) # [1, 1]
-    posterior = centered_data @ centered_data.T  # [24, 24]
-    posterior = norm_term + sigma_term + (0.5/sigma_sq) * np.trace(posterior)
-
-    return posterior
 
 
 def beta_reparameterization(mu, sigma_sq):

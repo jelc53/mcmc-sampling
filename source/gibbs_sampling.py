@@ -27,36 +27,33 @@ def sample_sigma_sq_conditional_posterior(data, theta):
 
 def sample_tau_conditional_posterior(data, theta):
     """Sample from tau|theta[-1] conditional posterior"""
-    tau = theta[1]
-    sigma_sq = theta[0]
-    mu = np.array([theta[2], theta[3]])
-    gam = np.array([theta[4], theta[5]])
+    sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
+    mu = np.array([mu1, mu2])
+    gam = np.array([gam1, gam2])
 
     # check bounds
-    if (gam - mu).any() == 0:  # all()?
+    if (gam - mu).any() == 0:
         return tau
 
     # compute mean, std
     n_4 = data[data['group'] == 4].shape[0]
     yi_4 = fetch_data_for_group(data, group_id=4)
     mean_vec = np.array(np.divide((yi_4 - gam), (mu - gam)))
-    mean = np.sum([np.sum(mean_vec[i]) for i in range(len(mean_vec))]) / n_4
+    mean = np.sum([a + b for a, b in mean_vec]) / n_4
     std = (sigma_sq / (n_4*np.linalg.norm(gam-mu, 2)**2))
 
     # sample truncated normal
-    a = (0-mean) / std
-    b = (1-mean) / std
-    proposal_tau = truncnorm.rvs(a, b, loc=mean, scale=std)
+    a, b = (0 - mean) / std, (1 - mean) / std
+    dist = truncnorm(a, b, loc=mean, scale=std)
 
-    return proposal_tau
+    return dist.rvs()
 
 
 def sample_mu_conditional_posterior(data, theta):
     """Sample from mu|theta[-1] conditional posterior"""
-    tau = theta[1]
-    sigma_sq = theta[0]
-    # mu = np.array([theta[2], theta[3]])
-    gam = np.array([theta[4], theta[5]])
+    sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
+    # mu = np.array([mu1, mu2])
+    gam = np.array([gam1, gam2])
 
     # group 1
     yi_1 = fetch_data_for_group(data, group_id=1)
@@ -86,10 +83,9 @@ def sample_mu_conditional_posterior(data, theta):
 
 def sample_gam_conditional_posterior(data, theta):
     """Sample from gam|theta[-1] conditional posterior"""
-    tau = theta[1]
-    sigma_sq = theta[0]
-    mu = np.array([theta[2], theta[3]])
-    # gam = np.array([theta[4], theta[5]])
+    sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
+    mu = np.array([mu1, mu2])
+    # gam = np.array([gam1, gam2])
 
     # group 2
     yi_2 = fetch_data_for_group(data, group_id=1)
@@ -123,9 +119,10 @@ def gibbs_sampling(data, n_samples, initial_position):
     samples = [initial_position]
 
     it = 0
+    start = time.time()
     while it < n_samples:  # num_samples * num_params
         it += 1
-        start = time.time()
+        print(curr_theta)
         idx = (it-1) % 4  # systematic
 
         if idx == 0:
@@ -148,7 +145,6 @@ def gibbs_sampling(data, n_samples, initial_position):
             gam_proposal = sample_gam_conditional_posterior(data, curr_theta)
             curr_theta[4:6] = gam_proposal
 
-        print(curr_theta)
         samples.append(curr_theta)
 
         if it % 20 == 0:

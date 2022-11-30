@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from scipy.stats import multivariate_normal
+from common import joint_posterior_density
 from common import fetch_data_for_group, fetch_param_for_group
 from common import generate_traceplots, generate_posterior_histograms
 
@@ -15,24 +16,6 @@ def transition_density(x, mu, sigma):
     # (2*np.pi)**(-6/2) * np.linalg.det(np.eye(len(mu)))**(-0.5) * np.exp(-0.5*(x-mu).T @ np.linalg.inv(np.eye(len(mu))) @ (x-mu))
     dist = multivariate_normal(mean=mu, cov=sigma*np.eye(len(mu)))
     return dist.pdf(x)
-
-
-def joint_posterior_density(data, theta):
-    """Compute posterior density given params theta and data"""
-    pi_list = []
-    n_groups = len(data['group'].unique())
-
-    for i in range(1, n_groups+1):
-        mu, sigma = fetch_param_for_group(theta, group_id=i)
-        x_grp = fetch_data_for_group(data, group_id=i)
-        n_data_points = x_grp.shape[0]
-
-        for j in range(n_data_points):
-            x = np.array(x_grp[j:j+1])
-            dist = multivariate_normal(mean=mu, cov=sigma)
-            pi_list.append(dist.pdf(x))
-
-    return np.prod(pi_list)*(1/theta[0])
 
 
 def hastings_ratio(proposed, curr_theta, data):
@@ -72,8 +55,8 @@ def metropolis_hastings(data, n_samples, step_size, inital_position):
 
         proposed = proposal_sampler(curr_theta, step_size)
         h_ratio = hastings_ratio(proposed, curr_theta, data)
-        # print(h_ratio)
         accept_prob = min(1, h_ratio)
+        # print(h_ratio)
 
         if np.random.uniform(0, 1) <= accept_prob:
             curr_theta = proposed
