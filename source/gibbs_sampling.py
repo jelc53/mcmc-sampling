@@ -43,8 +43,10 @@ def sample_tau_conditional_posterior(data, theta):
     std = (sigma_sq / (n_4*np.linalg.norm(gam-mu, 2)**2))
 
     # sample truncated normal
-    a, b = (0 - mean) / std, (1 - mean) / std
+    bounds = (0, 1)
+    a, b = (bounds[0] - mean) / std, (bounds[1] - mean) / std
     dist = truncnorm(a, b, loc=mean, scale=std)
+    print(mean, std)
 
     return dist.rvs()
 

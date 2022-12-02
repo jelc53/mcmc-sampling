@@ -63,6 +63,15 @@ def generate_posterior_histograms(samples, prefix=''):
     #     plt.show(); plt.close()
 
 
+def log_normal(x, mu=0, sigma=1):
+    """Helper function to query pdf from a log std normal"""
+    mu = np.ones_like(x) * mu
+    numerator = np.exp(-1*((x-mu)**2)/(2*sigma**2))
+    denominator = sigma * np.sqrt(2*np.pi)
+
+    return np.sum(np.log(numerator/denominator))
+
+
 def negative_log_prob(data, theta):
     """Compute negative log probability evaluated at a given theta"""
     n, k = data[['X1', 'X2']].shape
@@ -126,10 +135,10 @@ def fetch_param_for_group(theta, group_id):
 def center_data(mu, gam, tau, data):
     """Apply hierarchical logic to center data given theta"""
 
-    means_a = np.repeat(mu, 4).reshape(-1,2)
-    means_b = np.repeat(gam, 4).reshape(-1,2)
-    means_c = 0.5 * np.repeat(mu, 8).reshape(-1,2) + 0.5 * np.repeat(gam, 8).reshape(-1,2)
-    means_d = tau * np.repeat(mu, 8).reshape(-1,2) + (1 - tau) * np.repeat(gam, 8).reshape(-1,2)
+    means_a = np.repeat(mu, 4, axis=0)
+    means_b = np.repeat(gam, 4, axis=0)
+    means_c = 0.5 * np.repeat(mu, 8, axis=0) + 0.5 * np.repeat(gam, 8, axis=0)
+    means_d = tau * np.repeat(mu, 8, axis=0) + (1 - tau) * np.repeat(gam, 8, axis=0)
     means = np.vstack((means_a, means_b, means_c, means_d))
     centered_data = data[['X1', 'X2']] - means
 
