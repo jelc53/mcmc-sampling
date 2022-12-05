@@ -132,6 +132,13 @@ def fetch_param_for_group(theta, group_id):
     return mean, theta[0]*np.eye(2)
 
 
+def fetch_data(data):
+    """Helper function to fetch data and group vector"""
+    X = np.array(data[['X1', 'X2']])
+    t = np.array(data[['group']]).flatten()
+    return X, t
+
+
 def center_data(mu, gam, tau, data):
     """Apply hierarchical logic to center data given theta"""
 

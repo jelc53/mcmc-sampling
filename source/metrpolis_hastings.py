@@ -7,7 +7,6 @@ import pandas as pd
 
 from scipy.stats import multivariate_normal
 from common import joint_posterior_density
-from common import fetch_data_for_group, fetch_param_for_group
 from common import generate_traceplots, generate_posterior_histograms
 
 
@@ -79,7 +78,15 @@ if __name__ == '__main__':
     infile = sys.argv[1]
 
     np.random.seed(42)
-    inital_position = [1, 0.5, 0, 0, 0, 0]
+    initial_position = np.array([
+        1.,  # sigma
+        0.5,  # tau
+        -1.25,  # mu1
+        -0.5,  # mu2
+        -0.25,  # gam1
+        0.3  # gam2
+    ])
+
     step_size = np.ones(6)*0.05
     n_samples = 5000
     burn_in = 200

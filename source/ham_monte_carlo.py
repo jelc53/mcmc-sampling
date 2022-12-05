@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as st
 
-from common import center_data, negative_log_prob, joint_posterior_density
+from common import center_data, joint_posterior_density
 from common import generate_traceplots, generate_posterior_histograms
 
 
@@ -23,6 +23,12 @@ def dVdq(data, theta):
     centered_data = np.array(center_data(mu.reshape(1,-1), gam.reshape(1,-1), tau, data))
     sum_sq_cd = np.trace(centered_data @ centered_data.T)
     grad = np.zeros_like(theta)
+
+    # means = np.zeros_like(X)
+    # means[t == 1] = mu
+    # means[t == 2] = gam
+    # means[t == 3] = [x + y for x, y in zip([0.5 * x for x in mu], [0.5 * x for x in gam])]
+    # means[t == 4] = [x + y for x, y in zip([tau * x for x in mu], [(1 - tau) * x for x in gam])]
 
     # gradient wrt sigma_sq
     grad[0] = (n + 1) / sigma_sq - (1/(2*sigma_sq**2))*sum_sq_cd  # np.sum(np.power(np.linalg.norm(centered_data, ord=2, axis=1), 2))
@@ -60,7 +66,7 @@ def q_update(q, p, M_mat, step_size):
 
     if q_prop[1] > 1:
         p[1] = -p[1]
-        q_prop[1] = 1 - (q_prop[1] - 1)
+        q_prop[1] = -q_prop[1]
 
     return q_prop, p
 
@@ -134,12 +140,20 @@ if __name__ == '__main__':
     infile = sys.argv[1]
 
     np.random.seed(42)
+    initial_position = np.array([
+        1.,  # sigma
+        0.5,  # tau
+        -1.25,  # mu1
+        -0.5,  # mu2
+        -0.25,  # gam1
+        0.3  # gam2
+    ])
+
     n_samples = 5000
     burn_in = 200
     path_len = 1
     m = 5
     step_size = 0.01
-    initial_position = np.array([1., 0.5, -1.25, -0.5, -0.25, 0.3])
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
