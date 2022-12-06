@@ -1,10 +1,12 @@
 import os
 import sys
 import time
+import arviz
 
 import numpy as np
 import pandas as pd
 import scipy.stats as st
+# from autograd import grad
 
 from common import center_data, joint_posterior_density
 from common import generate_traceplots, generate_posterior_histograms
@@ -34,7 +36,7 @@ def dVdq(data, theta):
     grad[0] = (n + 1) / sigma_sq - (1/(2*sigma_sq**2))*sum_sq_cd  # np.sum(np.power(np.linalg.norm(centered_data, ord=2, axis=1), 2))
 
     # gradient wrt tau
-    grad[1] = (1/sigma_sq) * np.sum(centered_data[16:] @ (gam - mu))
+    grad[1] = (1/sigma_sq) * np.sum(centered_data[16:], axis=0) @ (gam - mu)
 
     # gradient wrt mu
     grad[2:4] = -(np.sum((centered_data[0:4]), axis=0) +
@@ -66,7 +68,7 @@ def q_update(q, p, M_mat, step_size):
 
     if q_prop[1] > 1:
         p[1] = -p[1]
-        q_prop[1] = -q_prop[1]
+        q_prop[1] = 1 - (q_prop[1]-1)
 
     return q_prop, p
 
@@ -118,7 +120,7 @@ def hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, pat
         curr = joint_posterior_density(data, samples[-1]) * np.exp(-(0.5/m)*np.linalg.norm(p0,2)**2)
         prop = joint_posterior_density(data, q_new) * np.exp(-(0.5/m)*np.linalg.norm(p_new,2)**2)
         alpha = min(1, prop/curr)
-        print(curr, prop, alpha)
+        # print(curr, prop, alpha)
 
         if np.random.uniform(0, 1) < alpha:
             samples.append(q_new)
@@ -131,8 +133,7 @@ def hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, pat
 
     end = time.time()
     print('Time taken: {}'.format(end - start))
-    print("Acceptance ratio: {}".format(accept_count/it))
-    return np.array(samples)
+    return np.array(samples), accept_count/it
 
 
 if __name__ == '__main__':
@@ -153,11 +154,22 @@ if __name__ == '__main__':
     burn_in = 200
     path_len = 1
     m = 5
-    step_size = 0.01
+    step_size = 0.005
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
 
-    samples = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
+    # for step_size in [0.005, 0.01, 0.05]:
+    #     for m in [1, 5, 10]:
+    #         samples, accept_ratio = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
+    #         arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
+    #         ess = arviz.ess(arviz_data_format)
+    #         print('Acceptance ratio: {}'.format(accept_ratio))
+    #         print('Number of effective samples: {}'.format(ess))
+    #         print('Effective sample mean: {}'.format(ess.mean()))
+            # np.save('hmc_samples.npy', samples)
+    samples, accept_ratio = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
+    np.save('hmc_samples.npy', samples)
+    samples = np.load('../output/hmc_samples.npy')
     generate_traceplots(samples[burn_in:], prefix='hmc_')
     generate_posterior_histograms(samples[burn_in:], prefix='hmc_')

@@ -1,9 +1,11 @@
 import os
 import sys
 import time
+import arviz
 
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
 
 from scipy.stats import multivariate_normal
 from common import joint_posterior_density
@@ -55,7 +57,6 @@ def metropolis_hastings(data, n_samples, step_size, inital_position):
         proposed = proposal_sampler(curr_theta, step_size)
         h_ratio = hastings_ratio(proposed, curr_theta, data)
         accept_prob = min(1, h_ratio)
-        # print(h_ratio)
 
         if np.random.uniform(0, 1) <= accept_prob:
             curr_theta = proposed
@@ -68,9 +69,7 @@ def metropolis_hastings(data, n_samples, step_size, inital_position):
 
     end = time.time()
     print('Time taken: {}'.format(end - start))
-    print("Acceptance ratio: {}".format(accept_count/it))
-    # print('Autocorrelation: {}'.format(sm.tsa.acf([samples[i][1] for i in range(len(samples))])))
-    return samples
+    return np.array(samples), accept_count/it
 
 
 if __name__ == '__main__':
@@ -87,13 +86,21 @@ if __name__ == '__main__':
         0.3  # gam2
     ])
 
-    step_size = np.ones(6)*0.05
-    n_samples = 5000
+    # step_size = np.ones(6)*0.05
+    n_samples = 500
     burn_in = 200
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
 
-    samples = metropolis_hastings(data, n_samples, step_size, inital_position)
+    for step_size in [np.ones(6)*0.01, np.ones(6)*0.05, np.ones(6)*0.1, np.ones(6)*0.5]:
+        samples, accept_ratio = metropolis_hastings(data, n_samples, step_size, initial_position)
+        arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
+        ess = arviz.ess(arviz_data_format)
+        print('Acceptance ratio: {}'.format(accept_ratio))
+        print('Number of effective samples: {}'.format(ess))
+        print('Effective sample mean: {}'.format(ess.mean()))
+        # np.save('mh_samples.npy', samples)
+    samples = np.load('../output/mh_samples.npy')
     generate_traceplots(samples[burn_in:], prefix='mh_')
     generate_posterior_histograms(samples[burn_in:], prefix='mh_')

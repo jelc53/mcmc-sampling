@@ -21,13 +21,13 @@ def generate_traceplots(samples, prefix=''):
     n_params = len(samples[0])
     param_names = ['sigma_sq', 'tau', 'mu1', 'mu2', 'gam1', 'gam2']
     fig, ax = plt.subplots(6, 1, sharex=True, figsize=(8, 11))
-    plt.tight_layout()
 
     for j in range(n_params):
         marginal_samples = [samples[i][j] for i in range(len(samples))]
-        ax[j].scatter(np.linspace(0, n_samples, num=len(samples)), marginal_samples)
+        ax[j].scatter(np.linspace(0, n_samples, num=len(samples)), marginal_samples, s=0.75)
         ax[j].set_ylabel(param_names[j])
     plt.xlabel('number of samples')
+    plt.tight_layout()
     outfile = prefix + 'sampled_traceplot.png'
     plt.savefig(os.path.join(os.path.pardir, 'output', outfile))
     plt.show(); plt.close()
@@ -45,12 +45,12 @@ def generate_posterior_histograms(samples, prefix=''):
     n_params = len(samples[0])
     param_names = ['sigma_sq', 'tau', 'mu1', 'mu2', 'gam1', 'gam2']
     fig, ax = plt.subplots(6, 1, figsize=(8, 12))
-    plt.tight_layout()
 
     for j in range(n_params):
         marginal_samples = [samples[i][j] for i in range(len(samples))]
         ax[j].hist(marginal_samples, bins=50)
         ax[j].set_xlabel(param_names[j])
+    plt.tight_layout()
     outfile = prefix + 'sampled_histogram.png'
     plt.savefig(os.path.join(os.path.pardir, 'output', outfile))
     plt.show(); plt.close()

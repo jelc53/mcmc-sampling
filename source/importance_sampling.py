@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as st
 
+from common import joint_posterior_density
 from common import generate_traceplots, generate_posterior_histograms
 
 
@@ -13,24 +14,18 @@ def generate_new_sample(theta):
     """Implements trial densities for each parameter"""
     pass
 
+
 def rejection_sampling(data, n_samples, initial_position, step_size):
     """Implement importance sampling methodology"""
     # initialization
     samples = [initial_position]
-    weight = 
 
     accept_count = 0
     start = time.time()
     for it in range(n_samples):
 
         # ...
-
-        # compute weight
-        if np.random.uniform(0, 1) < alpha:
-            samples.append(q_new)
-            accept_count += 1
-        else:
-            samples.append(np.copy(samples[-1]))
+        # ...
 
         if it % 20 == 0:
             print('Iteration {}: {}'.format(it, samples[-1]))
@@ -65,5 +60,6 @@ if __name__ == '__main__':
     data = pd.read_csv(file_path)
 
     samples = rejection_sampling(data, n_samples, initial_position, m, step_size, path_len)
+    np.save('is_samples.npy', samples)
     generate_traceplots(samples[burn_in:], prefix='is_')
     generate_posterior_histograms(samples[burn_in:], prefix='is_')

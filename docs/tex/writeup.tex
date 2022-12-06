@@ -3,304 +3,496 @@
 \newif\ifsolution\solutiontrue   % Include the solutions
 %\newif\ifsolution\solutionfalse  % Exclude the solutions
 
-\usepackage{cme213}
+\usepackage{stats370}
 \usepackage{xcolor}
 \usepackage{float}
+\usepackage{dsfont}
+% \usepackage{breqn}
 \usepackage{graphicx}
+\usepackage[section]{placeins}
+% \graphicspath{{output/}{\main/output/}}
+
+\allowdisplaybreaks
+\raggedbottom
 
 \newcommand{\T}[1]{\text{\texttt{#1}}}
 \newcommand{\V}[1]{\text{\textit{#1}}}
 
 \begin{document}
 
-{\centering \textbf{Homework 4: CUDA GPU Matrix Operations\\}}
+{\centering \textbf{Project: Sampling Methodologies \\}}
 \vspace*{-8pt}\noindent\rule{\linewidth}{1pt}
 
-Goal of the homework is to implement a finite difference solver for the
-2-dim heat equation using CUDA GPU programming.
+\paragraph{Purpose} of the project is to compare different sampling methodologies 
+for estimating the posterior $p(\theta|y_1,...,y_n)$ of a bayesian 
+inference problem.
 
-\paragraph{Problem 1: Implement global memory kernel } Idea: parallelize spatial
-dimension updates for each time step iteration. One key challenge was to handle
-the different border sizes for order inputs of 2, 4 and 8. Kernel logic included
-below.
-
-\begin{cpp}
-/**
- * Kernel to propagate finite difference grid from the current
- * time point to the next.
- */
-template<int order>
-__global__
-void gpuStencilGlobal(float* next, const float* __restrict__ curr, 
-                      int gx, int nx, int ny, float xcfl, float ycfl) {
-    
-    int borderSize = (int) (order / 2);
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-   
-    if (i < nx*ny) {
-	int x = borderSize + (int) (i / nx);
-	int y = borderSize + (i % nx);
-        int idx = gx * y + x;   
-        next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
-    
-    }
-}
-\end{cpp}
-
-3D surface plots of temperature on 256x256 grid at iterations 0, 1000 and 
-2000 respectively, with 8th order. To do this, I used parameter settings of:
-order = 8 and nx = ny = 248. As expected for heat diiffusion, our solution
-tends towards a low entropy state of constant temperature.
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.7]{global_0000.png}
-    \caption{3D surface plot of temperature at iteration 0}
-\end{figure}
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.7]{global_1000.png}
-    \caption{3D surface plot of temperature at iteration 1000}
-\end{figure}
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.7]{global_2000.png}
-    \caption{3D surface plot of temperature at iteration 2000}
-\end{figure}
-
-Performance in terms of both time (ms) and bandwidth (Gb/sec) are much 
-better already than those observed for CPU computation. Console logs 
-included at end of this document.
-
-
-\paragraph{Problem 2: Implement global memory block kernel } Idea: re-write 
-kernel to compute finite difference updates in blocks of size (\texttt{blockDim.y} 
-* \texttt{numYPerStep}) * \texttt{blockDim.x}. It should still only use 
-global memory.
-
-In order to ensure each thread calculates at most \texttt{numYPerStep} updates, we add 
-a for loop inside the kernel (sequential y steps for each thread) and change thread 
-block indexing for y dimension to be multiples of \texttt{numYPerStep}.
-
-\begin{cpp}
-/**
- * Kernel to propagate finite difference grid from the current
- * time point to the next.
- *
- * This kernel should be optimized to compute finite difference updates
- * in blocks of size (blockDim.y * numYPerStep) * blockDim.x. Each thread
- * should calculate at most numYPerStep updates. It should still only use
- * global memory.
- */
-template<int order, int numYPerStep>
-__global__
-void gpuStencilBlock(float* next, const float* __restrict__ curr, int gx, int nx, int ny,
-                    float xcfl, float ycfl) {
-    
-    int border = (int) (order / 2);
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = (blockIdx.y * blockDim.y + threadIdx.y)*numYPerStep;
-
-    if (i < nx) {
-	    int x = i + border;  // x coordinate of matrix
-        int niter = min(numYPerStep, ny-j);  // number of updates thread computes
-        for (int it = 0; it < niter; it++) {
-            int y = j + it + border;
-                int idx = gx * y + x;
-                next[idx] = Stencil<order>(&curr[idx], gx, xcfl, ycfl);
-        }
-    }
-}
-\end{cpp}
-
-Performance in terms of both time (ms) and bandwidth (Gb/sec) improved significantly
-compared with \texttt{gpuStencilGlobal}. Console logs included at end of this document.
-
-
-\paragraph{Problem 3: Plot bandwidth by grid size } Idea: want to understand how the 
-different algorithms perform in terms of bandwidth as we increase the scale of the 
-problem (grid size).
-
-To do this, we fixed iterations to be 100 and used the following grid sizes: 
-256x256; 512x512; 1024x1024; 2048x2048; 4096x4096.
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.7]{bandwidth_by_alg_ord8.png}
-    \caption{Bandwidth vs grid size for different algorithms at order 8}
-\end{figure}
-
-Figure 4 illustrates how bandwidth changes with grid size at order 8 for our three 
-different algorithms: global, block and shared. As we might expect, bandwidth 
-initially increases with grid size (as we increase the number of warps 
-simultaneously making requests to global memory), and asymptotically 
-approaches a limit that represents our memory bound. Interestingly 
-the block algorithm achieves higher bandwidth than shared and 
-global algorithms for all larger grid sizes.
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.7]{bandwidth_by_order_block.png}
-    \caption{Bandwidth vs grid size for block algorithm at orders 2, 4 and 8}
-\end{figure}
-
-Figure 5 illustrates how bandwidth changes with grid size for our block algorithm 
-as we increase grid size for orders 2, 4 and 8. As expected, bandwidth improves 
-as we increase order of our stencil. This is because a higher order stencil will 
-be making more coalesced requests to global memory.
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[scale=0.7]{bandwidth_by_order_shared.png}
-    \caption{Bandwidth vs grid size for shared algorithm at orders 2, 4 and 8}
-\end{figure}
-
-Figure 6 illustrates how bandwidth changes with grid size for our shared memory
-algorithm as we increase grid size for orders 2, 4 and 8. Similar to our block 
-algorithm, we see bandwidth improves as we increase order of the stencil. This 
-is because a higher order stencil will be making more coalesced requests to 
-shared memory associated with each thread block.
-
-
-\paragraph{Problem 4: Explain performance results } For my implementation, the block
-kernel for order 8 stencil achieved the best bandwidth (Gb/sec) across all grid sizes.
-However, my shared kernel performed comparably on time (ms) and was sometimes faster 
-at higher grid sizes, iterations and order.
-
-Bandwidth is the number of memory accesses divided by total execution time. In general, 
-as you increase the number of warps requesting memory, you hide the latency of 
-the memory pipe.
+\paragraph{Data} $(y_1,...,y_n)$ are gene expression measurements for two genes 
+on $n=24$ samples where $y_i=(y_{i,1}, y_{i,2})$ represent gene expressions for 
+sample i. Our samples are all labelled by "group", denoted $(t_1,...,t_n)$. 
+Cell type (or mix of cell types) vary with group and we assume mean gene 
+expression (but not variance) depends on cell type. Moreover, the expressions 
+of different genes are independently normally distributed.
 
 \begin{itemize}
-    \item \textbf{Difference among kernels. } The block kernel outperformed both shared 
-    and global kernels (figure 4). While this was expected for the global kernel given our block 
-    implementation should result in more cache hits, the shared memory performance was 
-    surprising. This may be due to bank conflicts or calibration of thread block 
-    dimensions vs \texttt{numYPerStep}.
-
-    \item \textbf{Difference from varying order. } As you increase stencil order, 
-    you improve the memory request pattern of each warp to be more coalesced.
-    This hides latency and improves bandwidth (figure 5).
-
-    \item \textbf{Difference from varying problem size. } As you increase grid size, 
-    you increase the number of warps requesting memory in parallel, which hides 
-    latency and improves our bandwidth. This improvement will asymptotically 
-    approach the memory bound (figures 4, 5 and 6).
-
+    \item $Y_i \sim N(\mu, \sigma^2 \mathbb{I})$ if sample $i$ from group 1
+    \item $Y_i \sim N(\gamma, \sigma^2 \mathbb{I})$ if sample $i$ from group 2
+    \item $Y_i \sim N(0.5\mu + 0.5\gamma, \sigma^2 \mathbb{I})$ if sample $i$ from group 3
+    \item $Y_i \sim N(\tau\mu + (1-\tau)\gamma, \sigma^2 \mathbb{I})$ if sample $i$ from group 4
 \end{itemize}
 
+Our model has a 6-dimensional parameter $\theta = (\sigma^2, \tau, \mu_1, \mu_2, \gamma_1, \gamma_2)$.
 
-\paragraph{Problem 5: Implement shared memory block kernel } Idea: copy across current 
-array values into shared memory to reduce access requests to global memory and make use 
-of higher shared memory access speeds (lower latency because closer to each processor 
-core). We do this at the thread block level since we are guaranteed warps within a 
-thread block share the same SM and therefore shared memory. 
+For all sampling methodologies, I computed 5000 samples with a 
+burn-in of 200. The rest (step size, momentum, proposals, etc.) I 
+discuss and treat as design choices.
 
-One key challenge was that each thread block needs to be able to access more values from 
-the current array than it updates (based on stencil order). This means our shared memory 
-blocks are necessarily overlapping to ensure we update the whole array. We enforce this 
-"overlapping" thread block behaviour through our mapping of thread id to our current 
-array index. Kernel logic included below.
+\section{Metropolis Hastings}
+To implement the Metropolis-Hastings algorithm we require the 
+joint and transition densities to compute the hastings ratio. 
+Below we derive the join density for our model, and treat the 
+transition density as a design choice.
 
-\begin{cpp}
-/**
-* Kernel to propagate finite difference grid from the current
-* time point to the next.
-*
-* This kernel should be optimized to compute finite difference updates
-* in blocks of size side * side using shared memory.
-*/
-template<int side, int order>
-__global__
-void gpuStencilShared(float* next, const float* __restrict__ curr, int gx, int gy,
-               float xcfl, float ycfl) {
-    
-    // map thread to global position
-    int border = order / 2;
-    int numY = side / blockDim.y;
-    int sub_square_side = side - order;
-    int i = blockIdx.x*sub_square_side + threadIdx.x;
-    int j = blockIdx.y*sub_square_side + threadIdx.y*numY;
-    
-    // load mesh grid into shared memory
-    __shared__ float shared[side][side];
-    if (i < gx) 
-    {
-        int niter = min(numY, gy-j);  // number of updates thread computes 
-	for (int it = 0; it < niter; it++) {
-	    if ((j+it) < gy) {
-	        shared[threadIdx.y*numY+it][threadIdx.x] = curr[gx*(j+it)+i];
-	    }
-	}
-    }
-    __syncthreads(); 
+\textbf{Joint density}:
+\begin{align*}
+    p(\theta|y) & \propto \prod_{i=1}^n p(y|\theta) p(\theta) \\
+                & = \prod_{t=1}^4 \prod_{i=1}^n 1\{t_i=t\} \cdot p(y_i|\theta) \cdot p(\mu) \cdot p(\gamma) \cdot p(\tau) \cdot p(\sigma^2) \\
+                & = \prod_{t_i=1} N(\mu, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=2} N(\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=3} N(0.5\mu + 0.5\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=4} N(\tau\mu + (1-\tau)\gamma, \sigma^2 \mathbb{I}) \cdot p(\sigma^2)
+\end{align*}
 
-    // apply stencil inside domain
-    if (i < (gx-border) &&
-	threadIdx.x >= border && 
-	threadIdx.x < (side-border)) 
-    {
-        int niter = min(numY, gy-j);  // number of updates thread computes 
-        for (int it = 0; it < niter; it++) {
-            if ((j+it) < (gy-border) &&
-                (threadIdx.y*numY+it) >= border &&
-                    (threadIdx.y*numY+it) < (side-border)) 
-            {
-                next[gx*(j+it)+i] = Stencil<order>(
-                    &shared[threadIdx.y*numY+it][threadIdx.x], 
-                    side, 
-                    xcfl, 
-                    ycfl);
-            }
-        }
-    }
-} 
-\end{cpp}
+\textbf{Hastings Ratio}: let $q(\theta_0, \theta_1)$ be our transition density and 
+$\pi(y,\theta)$ be our join density. Then, 
+$$\text{accept prob.} = \min(1, \frac{q(\theta_0, \theta_1)\pi(y,\theta_1)}{q(\theta_1, \theta_0)\pi(y,\theta_0)})$$
 
-\pagebreak
-Console logs from executing our kernels for grid size 1024x1024
-at order 8 for 400 iterations.
+\begin{python}
+def metropolis_hastings(data, n_samples, step_size, inital_position):
+    curr_theta = inital_position.copy()
+    samples = [curr_theta]
 
-\begin{verbatim}
-Output from main
-----------------
-Order: 8, 4096x4096, 100 iterations
-                        time (ms)     GBytes/sec
-            CPU           2661.73        45.3824
-            Global        50.2889        2402.04
-            Block         37.3118        3237.48
-            Shared        41.8833        2884.11
+    while it < n_samples:
 
-                            L2Ref           LInf          L2Err
-            Global       0.447065              0              0
-            Block        0.447065              0              0
-            Shared       0.447065              0              0
-\end{verbatim}
+        proposed = proposal_sampler(curr_theta, step_size)
+        h_ratio = hastings_ratio(proposed, curr_theta, data)
+        accept_prob = min(1, h_ratio)
+
+        if np.random.uniform(0, 1) <= accept_prob:
+            curr_theta = proposed
+            accept_count += 1
+
+        samples.append(curr_theta)
+
+    return samples
+\end{python}
+
+The Metropolis-Hastings algorithm itself is very simple,
+However, there are still a number of design choices we need to make, 
+such as (a) how to propose a new sample, (b) enforcing any constraints 
+we have (e.g. $\tau \in [0,1]$), and (c) choosing hyperparameters (step 
+size, burn-in).
+
+\textbf{Proposal selection}: If possible, we would like to pick a symmetric 
+proposal distribution to sample from (which implies a symmetric transition 
+kernel) since this will simplify computation and guarantee detail balance. 
+I used a gaussian random step with mean equal to the step size and variance 
+of 1 which worked well (achieved reasonable acceptance ratio of 0.4-0.5).
+
+\begin{python}
+    def proposal_sampler(curr_theta, step_size):
+    num_params = len(curr_theta)
+
+    while True:
+        randomness = np.random.normal(0, 1, num_params)
+        proposal = curr_theta + np.multiply(step_size, randomness)
+
+        if proposal[0] > 0 and (proposal[1] >= 0 and proposal[1] <= 1):
+            break
+
+    return proposal
+\end{python}
+
+Note: If this choice had not worked so well, I would have tried non-symmetric 
+options that better mimic the expected behaviour of $tau$ and $sigma^2$ parameters
+given their constraints.
+
+\textbf{Enforcing constraints}: We had two constraints to consider: (a) $sigma^2 > 0$ 
+and (b) $0 \le tau \le 1$. I enforce these constraints in the proposal sampler function 
+but simply resampling if the proposal violates either (a) or (b). Note, this would be 
+problematic (i.e. lead to us collecting biased posterior samples) if these constraints were 
+often binding, however, we can see in the results below (figure 1) that neither $sigma^2$ 
+nor $tau$ have maximum likelihoods or significant probability density near their boundaries 
+and so the biased-ness we introduce will be minimal. 
+
+\textbf{Hyperparameters}: There are not many hyperparameters to 
+tune for Metropolis-Hastings, which is one of its advantages! I 
+experimented with different step sizes (0.01, 0.05, 0.1, 0.5), 
+and for each computed the acceptance ratio and number of 
+effective (uncorrelated) samples for 300 sample test (after 
+burn-in). I choose a step size of 0.05 since it maximized 
+number of effective samples.
+
+\begin{table}[h]
+    \begin{tabular}{lllll}
+        Step size                   & 0.01 & 0.05  & 0.1   & 0.5   \\
+        Acceptance ratio            & 0.92 & 0.45  & 0.19  & 0.02  \\
+        Number of effective samples & 4.53 & 16.64 & 9.97  & 6.96  \\
+                                    &      &       &       &         
+    \end{tabular}
+\end{table}
+
+I did not investigate varying initialization (used $[1., 0.5, 0., 0., 0., 0.]$)
+or burn-in (fixed at 200 to match what I saw in textbook examples).
+
+\textbf{Results}: Using the above design choices, we produce the following 
+samples from our posterior (figure 1). These passed basic 
+sense checks, such as $\sigma^2$ and $\tau$ falling within 
+their respective bounds, lower variance as we increase number 
+of samples, and minimal density on boundary of $\tau$ as hoped.
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.7]{mh_sampled_histogram.png}
+    \caption{Histogram of Metropolis-Hastings posterior samples}
+\end{figure}
+
+The traceplots in figure 2 give an indication of how well the sampler 
+explored the posterior density. I am comforted by the fact that 
+there are no long periods of repeated values (getting stuck) 
+despite an acceptance rate of only 0.45.
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.7]{mh_sampled_traceplot.png}
+    \caption{Traceplot for Metropolis-Hastings sampling}
+\end{figure}
+
+\textbf{Final remarks}. Metropolis-Hastings is simple to implement 
+and relatively fast to run (time = 197 sec for 5000 samples), however,
+number of effective samples (autocorrelation) and acceptance ratio 
+were not as good as we might expect from other technqiues that take 
+more directed paths through the posterior space (e.g. HMC).   
 
 
-Submission information logs.
-\begin{verbatim}
-jelc@cardinal2:~$ /afs/ir.stanford.edu/class/cme213/script/submit.py hw4 private/cme213-jelc53/hw4/
-Submission for assignment 'hw4' as user 'jelc'
-Attempt 1/10
-Time stamp: 2022-05-19 00:20
-List of files being copied:
-    private/cme213-jelc53/hw4/gpuStencil.cu	 [12599 bytes]
 
-Your files were copied successfully.
-Directory where files were copied: /afs/ir.stanford.edu/class/cme213/submissions/hw4/jelc/1
-List of files in this directory:
-    gpuStencil.cu	 [12599 bytes]
-    metadata	 [137 bytes]
+\section{Hamiltonian Monte Carlo} 
+To implement the Hamiltonian Monte Carlo we need to compute 
+the Hamiltonian $H(\rho, \theta)$ given independently drawn momentum 
+$\rho$ and our current paramewter values $\theta$. 
+\begin{align*}
+    H(\theta, y) & = -\log p(\rho, \theta) \\
+                 & = - \log p(\rho|\theta) - \log p(\theta) \\
+                 & = K(\rho, \theta) + V(\theta) && \text{kinetic and potential energy}
+\end{align*}
+We now evolve the system using the following equations from 
+Hamiltonian mechanics. Note: $\frac{\partial V}{\partial \rho} = 0$ 
+and if we choose our kinetic energy to be gaussian 
+$K(\rho, \theta) = \frac{1}{2}\rho^T M^{-1} \rho + \log |M| + \text{const.}$ 
+so we get $\frac{\partial K}{\partial \rho} = M^{-1} \rho$ and 
+$\frac{\partial K}{\partial \theta} = 0$.
+\begin{align*}
+    \frac{d\theta}{dt} & = + \frac{\partial H}{\partial \rho} = + \frac{\partial K}{\partial \rho} + \frac{\partial V}{\partial \rho} = M^{-1} \rho \\
+    \frac{d\rho}{dt}   & = - \frac{\partial H}{\partial \theta} = -\frac{\partial K}{\partial \theta} - \frac{\partial V}{\partial \theta} = -\frac{\partial V}{\partial \theta}
+\end{align*}
 
-This completes the submission process. Thank you!
-    
+Therefore, to implement the above system, we need only to calculate 
+the gradient of our potential energy (negative log likelihood) with 
+respect to our parameters $\theta$.
 
-jelc@cardinal2:~$ ls /afs/ir.stanford.edu/class/cme213/submissions/hw4/jelc/1
-gpuStencil.cu  metadata
+\textbf{Negative log likelihood}: let $V(\theta) = -l(\theta) = -\log p(\theta|y)$,
+\begin{align*}
+    V(\theta) & = - \log \prod_{i=1}^n p(y|\theta) p(\theta) \\
+              & = - \sum_{i=1}^n \log p(y|\theta) - \log p(\theta) && \text{let $y_i'$ = centered data}\\
+              & = - \sum_{i=1}^n \log \left[(2\pi)^{-k/2} \cdot |\sigma^2 \mathbb{I}|^{-1/2} \cdot \exp(\frac{-1}{2} y_i'^T (\sigma^2 \mathbb{I})^{-1} y_i')\right] - \log \frac{1}{\sigma^2} \\
+              & = \frac{nk}{2} \log 2\pi + (n+1) \log \sigma^2 + \frac{1}{2\sigma^2} \sum_{i=1}^n y_i'^T \mathbb{I}^{-1} y_i'       
+\end{align*}
 
-\end{verbatim}
+\textbf{Gradient of $V(\theta)$ wrt $\theta$}: 
+\begin{align*}
+    \frac{\partial V(\theta)}{\partial \sigma^2} & = \frac{n+1}{\sigma^2} - \frac{1}{2(\sigma^2)^2}\sum_{i=1}^n \|y_i'\|^2_2 \\
+    \frac{\partial V(\theta)}{\partial \tau} & = \frac{1}{\sigma^2} \cdot (\gamma - \mu)^T \sum_{t_i=4} y_i' \\
+    \frac{\partial V(\theta)}{\partial \mu} & = - \frac{1}{\sigma^2} \cdot \left[\sum_{t_i=1} y_i' + 0.5\sum_{t_i=3} y_i' + \tau\sum_{t_i=4} y_i'\right]\\
+    \frac{\partial V(\theta)}{\partial \gamma} & = - \frac{1}{\sigma^2} \cdot \left[\sum_{t_i=2} y_i' + 0.5\sum_{t_i=3} y_i' + (1-\tau)\sum_{t_i=4} y_i'\right]
+\end{align*}
+
+Our implementation of these hamiltonian equations employs a 
+leapfrog algorithm to perform numerical integration. This is 
+a second-order method as opposed to euler which is first-order. 
+This design choice helps with stability.
+\begin{python}
+def leapfrog(q, p, data, M_mat, path_len, step_size):
+    q, p = np.copy(q), np.copy(p)  # curr_theta = q
+
+    p -= step_size * dVdq(data, q) / 2
+    for _ in range(int(path_len / step_size)):
+        q, p = q_update(q, p, M_mat, step_size)
+        p -= step_size * dVdq(data, q)
+
+    q, p = q_update(q, p, M_mat, step_size)
+    p -= step_size * dVdq(data, q) / 2
+
+    # momentum flip at end
+    return q, -p
+
+def hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len=1):
+    samples = [initial_position]
+    size = (n_samples,) + initial_position.shape[:1]
+    M_mat = np.eye(len(initial_position)) * m
+    momentum = st.norm(0, m)
+
+    for p0 in momentum.rvs(size=size):
+        # integrate over our path to get new position and momentum
+        q_new, p_new = leapfrog(
+            samples[-1],
+            p0,
+            data,
+            M_mat=M_mat,
+            path_len=path_len,
+            step_size=step_size,
+        )
+
+        # check metropolis acceptance criterion
+        curr = joint_posterior_density(data, samples[-1]) * np.exp(-(0.5/m)*np.linalg.norm(p0,2)**2)
+        prop = joint_posterior_density(data, q_new) * np.exp(-(0.5/m)*np.linalg.norm(p_new,2)**2)
+        alpha = min(1, prop/curr)
+
+        if np.random.uniform(0, 1) < alpha:
+            samples.append(q_new)
+        else:
+            samples.append(np.copy(samples[-1]))
+
+    return np.array(samples)
+\end{python}
+
+The Hamiltonian Monte Carlo algorithm has a number of design 
+choices, including (a) whether to use an acceptance criterion, 
+(b) enforcing any constraints we have (e.g. $\tau \in [0,1]$), 
+and (c) choosing hyperparameters (step size, momentum).
+
+\textbf{Acceptance criterion}: My first implementation did not 
+include an acceptance step which was faster to evaluate but did 
+not produce sensible, unbiased posterior samples. Adding the 
+metropolis acceptance criterion at the end of each iteration 
+helped to correct for errors introduced via numerical 
+integration.
+
+\textbf{Enforcing constraints}: We had two constraints to consider: (a) $sigma^2 > 0$ 
+and (b) $0 \le tau \le 1$. I enforce these constraints in the q 
+($\theta$) update function by creating a "hard wall" or barrier, 
+where we assume both $p$ (momentum) and $q$ (parameter $\theta$) 
+are reversed (flip sign) by same magnitude that they surpassed 
+the constraint.
+
+\begin{python}
+def q_update(q, p, M_mat, step_size):
+    """Helper function to update theta within bounds"""
+    q_prop = q + step_size * np.linalg.inv(M_mat) @ p
+
+    # check bounds
+    if q_prop[0] < 0:
+        p[0] = -p[0]
+        q_prop[0] = -q_prop[0]
+
+    if q_prop[1] < 0 or q_prop[1] > 1:
+        p[1] = -p[1]
+        q_prop[1] = -q_prop[1]
+
+    return q_prop, p
+\end{python}
+
+\textbf{Hyperparameters}: I experimented with different step 
+sizes (0.005, 0.01, 0.05) and momentum variance values (1, 5, 10). 
+For each combination I computed the acceptance ratio and number of 
+effective (uncorrelated) samples for 300 sample test (after 
+burn-in of 200). I choose a (step size, momentum) pair of 
+(0.005, 10) since it maximized number of effective samples, 
+excluding experiments with low acceptance (e.g. (0.05, 1)).
+
+\begin{table}[H]
+    \begin{tabular}{llll}
+        Step size    & Momentum     & Accept ratio      & Eff. samples          \\
+        0.005        & 1            & 0.98              & 73.8                  \\ 
+        0.005        & 5            & 0.99              & 139.4                 \\
+        0.005        & 10           & 0.99              & 11.5                  \\
+        0.01         & 1            & 0.97              & 66.3                  \\
+        0.01         & 5            & 0.98              & 99.8                  \\
+        0.01         & 10           & 0.97              & 55.91                 \\
+        0.05         & 1            & 0.004             & 300                   \\
+        0.05         & 15           & 0.64              & 112.7                 \\
+        0.05         & 10           & 0.91              & 74.8                  \\      
+    \end{tabular}
+\end{table}
+
+I did not investigate varying initialization (used $[1., 0.5, 0., 0., 0., 0.]$), 
+burn-in (fixed at 200 to match what I saw in textbook examples) or path length
+(used 1 as set number of leapfrog steps eual to path length / step size).
+
+\textbf{Results}: Using the above design choices, we produce the following 
+samples from our posterior (figure 3).
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.7]{hmc_sampled_histogram.png}
+    \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
+\end{figure}
+
+The traceplots in figure 4 give an indication of how well the sampler 
+explored the posterior density. I am comforted by the fact that 
+there are no long periods of repeated values (getting stuck) 
+despite us not implementing no-turn logic. 
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.7]{hmc_sampled_traceplot.png}
+    \caption{Traceplot for Hamiltonian Monte Carlo sampling}
+\end{figure}
+
+\textbf{Final remarks}. HMC was much slower to run than Metropolis-
+Hastings due to the gradient evaluation at each iteration (4,205 sec 
+for 5000 samples), however, our acceptance ratio was much higher 
+(approx. 0.95 vs 0.45). Moreover, our samples were far less likely 
+to be autocorrelated (approx. 46 vs 5 effective samples per 100 
+iterations). This is because we are taking directed rather than 
+random steps through the posterior.
+
+
+
+\section{Gibbs Sampling}
+To implement the Gibbs Sampling we need to derive the conditional 
+distributions from which to sample. \newline
+
+\textbf{Conditional distributions} Idea: start with joint posterior 
+density, then remove constants (e.g. terms with only fixed parameters) 
+and rearrange to derive density conditional distribution we can sample 
+from. To simplify notation, let $\theta[-x]$ represent all parameters 
+of $\theta$ exluding parameter $x$ and let $y_i'$ represent centered data 
+(e.g. $y_1' = y_1 - \mu$).  
+\begin{align*}
+    p(\sigma^2|y,\theta[-\sigma^2]) & \propto \prod_{t_i=1} N(\mu, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=2} N(\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=3} N(0.5\mu + 0.5\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=4} N(\tau\mu + (1-\tau)\gamma, \sigma^2 \mathbb{I}) \cdot p(\sigma^2) \\
+        & \propto |\sigma^2 \mathbb{I}_2|^{-n/2} \cdot \frac{1}{\sigma^2} \cdot \exp\left(-\frac{1}{2\sigma^2}\sum_{i=1}^n y_i'^T \mathbb{I}^{-1} y_i'\right) \\
+        & \propto (\frac{1}{\sigma^2})^{n+1} \cdot \exp\left(-\frac{1}{\sigma^2} \cdot \frac{1}{2} \sum_{i=1}^n \|y_i'\|^2_2\right) \\
+        & = x^{\alpha + 1} \cdot \exp(-x \beta) \\
+    \therefore \sigma^2 | y, \theta[-\sigma^2] & \sim \text{InvGamma}\left(n, \quad \frac{1}{2} \sum_{i=1}^n \|y_i'\|^2_2\right)
+\end{align*}
+
+\begin{align*}
+    p(\tau|y,\theta[-\tau]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i=4} (y_i - (\tau\mu + (1-\tau)\gamma))^T \mathbb{I}^{-1} (y_i - (\tau\mu + (1-\tau)\gamma)) \right)\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \sum_{t_i=4} (\tau \vec{i} - \alpha_i)^T \mathbb{I}^{-1} (\tau \vec{i} - \alpha_i) \right) && \text{let $\vec{i} = (1, 1)$} \\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \sum_{t_i=4} \left( \|\tau \vec{i}\|^2_2 - 2\tau \vec{i}^T \alpha_i + \|\alpha_i\|^2_2\right) \right) && \text{$\|\alpha_i\|^2_2$ constant} \\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \left( n_4 \tau^2 - 2\tau \vec{i}^T \sum_{t_i=4} \alpha_i \right) \right) && \\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{n_4 \|\gamma - \mu\|^2_2}{\sigma^2} \left(\tau - \frac{\sum_{t_i=4} \alpha_i}{n_4} \right)^2 \right) && \text{complete the square}
+\end{align*}
+$$\therefore \tau | y, \theta[-\tau] \sim \text{TruncNormal}\left(\frac{\sum_{t_i=4} \alpha_i}{n_4}, \frac{\sigma^2}{n_4 \|\gamma - \mu\|^2_2}, 0, 1\right) \quad \text{where } \alpha_i = y_i^T \mu - \gamma^T\gamma - y_i^T\gamma - \mu^T\gamma$$
+
+\begin{align*}
+    p(\mu|y,\theta[-\mu]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{1,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) && \text{$\bar{y}_i$ = group mean}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} (\mu - \bar{\mu}_i^{t_i})^T \mathbb{I}^{-1} (\mu - \bar{\mu}_i^{t_i}) \right) && \text{rearrange for $\mu$}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} \left(\|\mu\|^2_2 - 2\mu^T \bar{\mu}_i^{t_i} + \|\bar{\mu}_i^{t_i}\|^2_2 \right)\right) && \text{$\|\bar{\mu}_i^{t_i}\|^2_2$ constant}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_1 + 0.5^2 n_3 + \tau^2 n_4)\|\mu\|^2_2 - 2\mu^T \sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i} \right)\right) && \text{take $\|\mu\|^2_2$ outside sum}\\
+        & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_1 + 0.5^2 n_3 + \tau^2 n_4}{\sigma^2} && \text{complete the square} \\
+        & \quad \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i}}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right)^T \mathbb{I}^{-1} \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i}}{n_1 + 0.5^2 n_3 + tau^2 n_4} \right)\biggr) && \\
+    \therefore \mu | y, \theta[-\mu] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i}}{n_1 + 0.5^2 n_3 + \tau^2 n_4}, \quad \frac{\sigma^2}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right) \\
+    \text{where} & \quad \bar{\mu}_i^{t=1} = y_i \text{;} \quad \bar{\mu}_i^{t=3} = (y_i - 0.5\gamma) / 0.5 \text{;} \quad \bar{\mu}_i^{t=4} = (y_i - (1-\tau)\gamma) / \tau 
+\end{align*}
+
+\begin{align*}
+    p(\gamma|y,\theta[-\gamma]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{2,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) \\ %&& \text{$\bar{y}_i$ = group mean}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} (\gamma - \bar{\gamma}_i^{t_i})^T \mathbb{I}^{-1} (\gamma - \bar{\gamma}_i^{t_i}) \right) \\ %&& \text{rearrange for $\gamma$}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} \left(\|\gamma\|^2_2 - 2\gamma^T \bar{\gamma}_i^{t_i} + \|\bar{\gamma}_i^{t_i}\|^2_2 \right)\right) \\ %&& \text{$\|\bar{\gamma}_i^{t_i}\|^2_2$ constant}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4)\|\gamma\|^2_2 - 2\gamma^T \sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i} \right)\right) \\ %&& \text{take $\|\gamma\|^2_2$ outside sum}\\
+        & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}{\sigma^2} \\ %&& \text{complete the square} \\
+        & \quad \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)^T \mathbb{I}^{-1} \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)\biggr) && \\
+    \therefore \gamma | y, \theta[-\gamma] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}, \quad \frac{\sigma^2}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right) \\
+    \text{where} & \quad \bar{\gamma}_i^{t=2} = y_i \text{;} \quad \bar{\gamma}_i^{t=3} = (y_i - 0.5\mu) / 0.5 \text{;} \quad \bar{\gamma}_i^{t=4} = (y_i - \tau\mu) / (1-\tau) 
+\end{align*}
+
+Having derived our conditional distributions, the gibbs implementation
+itself is very straightforward. We iterate through and update one or 
+multiple parameters at a time (see below).  
+\begin{python}
+def gibbs_sampling(data, n_samples, initial_position):
+    samples = [initial_position]
+
+    it = 0
+    while it < n_samples:
+        it += 1
+        curr_theta = samples[-1].copy()
+        idx = (it-1) % 4  # systematic
+
+        if idx == 0:
+            sigma_sq_proposal = sample_ssq_conditional_posterior(data, curr_theta)
+            curr_theta[0] = sigma_sq_proposal
+
+        elif idx == 1:
+            tau_proposal = sample_tau_conditional_posterior(data, curr_theta)
+            curr_theta[1] = tau_proposal
+
+        elif idx == 2:
+            mu_proposal = sample_mu_conditional_posterior(data, curr_theta)
+            curr_theta[2:4] = mu_proposal
+
+        elif idx == 3:
+            gam_proposal = sample_gam_conditional_posterior(data, curr_theta)
+            curr_theta[4:6] = gam_proposal
+
+        else:
+            print("Error: trying to update out-of-bounds parameter!")
+        samples.append(curr_theta)
+
+    return np.array(samples)
+\end{python}
+
+The Gibbs Sampling algorithm has a number of design 
+choices, including (a) systematic vs random scan, and
+(b) block vs individual parameter updates. Note: there 
+is no hyperparameter tuning for step size here because 
+we take a completely new sample (from an adaptive proposal 
+distribution) at each step.
+
+\textbf{Systematic vs random scan}: While random scan ensures 
+detail balance of our markov chain, I preferred to use a 
+systematic scan since it was more efficient, especially over 
+smaller sampling experiments (guarantees an equal number of 
+updates for each).
+
+\textbf{Block updates for mu and gamma}: Since $\mu_1, \mu_2$ 
+and $\gamma_1, \gamma_2$ would always come from the same 
+distribution I found it more efficient to update these together, 
+drawing from a 2-dim multivariate normal rather than separately. 
+This does mean that our proposals
+
+\textbf{Results}: Using the above design choices, we produce the following 
+samples from our posterior (figure 5).
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.7]{gibbs_sampled_histogram.png}
+    \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
+\end{figure}
+
+The traceplots in figure 6 give an indication of how well the sampler 
+explored the posterior density. I am comforted by the fact that 
+there are no long periods of repeated values (getting stuck) 
+despite us not implementing no-turn logic. 
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.7]{gibbs_sampled_traceplot.png}
+    \caption{Traceplot for Hamiltonian Monte Carlo sampling}
+\end{figure}
+
+\textbf{Final remarks}. The Gibbs sampling algorithm is lightning 
+fast compared to MH and HMC (25.0 sec!). This is because it does 
+not execute an acceptance criterion! The main tradeoff is that our 
+samples have significant autocorrelation (approx. 16 effective 
+samples per 100 iterations). Note, the number of effective samples 
+still surpasses MH but is almost 1/3 of our HMC result.
+
+
+
+\section{Importance Sampling} xx
+
+\section{Comparison of methodologies} Autocorrelation, speed to evaluate, sample efficiency,
+ biased estimator, ...table!
+ 
+
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[scale=0.7]{global_0000.png}
+%     \caption{3D surface plot of temperature at iteration 0}
+% \end{figure}
+
 
 \end{document}

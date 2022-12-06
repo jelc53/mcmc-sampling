@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import arviz
 
 import numpy as np
 import pandas as pd
@@ -159,9 +160,7 @@ def gibbs_sampling(data, n_samples, initial_position):
 
     end = time.time()
     print('Time taken: {}'.format(end - start))
-    print("Acceptance ratio: {}".format(it/it))
-    # print('Autocorrelation: {}'.format(sm.tsa.acf([samples[i][1] for i in range(len(samples))])))
-    return samples
+    return np.array(samples), it/it
 
 
 if __name__ == '__main__':
@@ -184,6 +183,13 @@ if __name__ == '__main__':
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
 
-    samples = gibbs_sampling(data, n_samples, initial_position)
+    samples, accept_ratio = gibbs_sampling(data, n_samples, initial_position)
+    arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
+    ess = arviz.ess(arviz_data_format)
+    print('Acceptance ratio: {}'.format(accept_ratio))
+    print('Number of effective samples: {}'.format(ess))
+    print('Effective sample mean: {}'.format(ess.mean()))
+    # np.save('gibbs_samples.npy', samples)
+    samples = np.load('../output/gibbs_samples.npy')
     generate_traceplots(samples[burn_in:], prefix='gibbs_')
     generate_posterior_histograms(samples[burn_in:], prefix='gibbs_')
