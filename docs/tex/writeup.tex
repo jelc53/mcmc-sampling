@@ -114,12 +114,12 @@ Note: If this choice had not worked so well, I would have tried non-symmetric
 options that better mimic the expected behaviour of $tau$ and $sigma^2$ parameters
 given their constraints.
 
-\textbf{Enforcing constraints}: We had two constraints to consider: (a) $sigma^2 > 0$ 
-and (b) $0 \le tau \le 1$. I enforce these constraints in the proposal sampler function 
+\textbf{Enforcing constraints}: We had two constraints to consider: (a) $\sigma^2 > 0$ 
+and (b) $0 \le \tau \le 1$. I enforce these constraints in the proposal sampler function 
 but simply resampling if the proposal violates either (a) or (b). Note, this would be 
 problematic (i.e. lead to us collecting biased posterior samples) if these constraints were 
-often binding, however, we can see in the results below (figure 1) that neither $sigma^2$ 
-nor $tau$ have maximum likelihoods or significant probability density near their boundaries 
+often binding, however, we can see in the results below (figure 1) that neither $\sigma^2$ 
+nor $\tau$ have maximum likelihoods or significant probability density near their boundaries 
 and so the biased-ness we introduce will be minimal. 
 
 \textbf{Hyperparameters}: There are not many hyperparameters to 
@@ -272,12 +272,12 @@ metropolis acceptance criterion at the end of each iteration
 helped to correct for errors introduced via numerical 
 integration.
 
-\textbf{Enforcing constraints}: We had two constraints to consider: (a) $sigma^2 > 0$ 
-and (b) $0 \le tau \le 1$. I enforce these constraints in the q 
-($\theta$) update function by creating a "hard wall" or barrier, 
-where we assume both $p$ (momentum) and $q$ (parameter $\theta$) 
-are reversed (flip sign) by same magnitude that they surpassed 
-the constraint.
+\textbf{Enforcing constraints}: We had two constraints to consider: 
+(a) $\sigma^2 > 0$ and (b) $0 \le \tau \le 1$. I enforce these 
+constraints in the q ($\theta$) update function by creating a 
+"hard wall" or barrier, where we assume both $p$ (momentum) and 
+$q$ (parameter $\theta$) are reversed (flip sign) by same magnitude 
+that they surpassed the constraint.
 
 \begin{python}
 def q_update(q, p, M_mat, step_size):
