@@ -190,7 +190,7 @@ if __name__ == '__main__':
     burn_in = 200
     path_len = 1
     m = 5
-    step_size = 0.01
+    step_size = 0.005
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
@@ -206,6 +206,6 @@ if __name__ == '__main__':
             # np.save('hmc_samples.npy', samples)
     samples, accept_ratio = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
     np.save('hmc_autograd_samples.npy', samples)
-    samples = np.load('../output/hmc_autograd_samples.npy')
+    # samples = np.load('../output/hmc_autograd_samples.npy')
     generate_traceplots(samples[burn_in:], prefix='hmc_')
     generate_posterior_histograms(samples[burn_in:], prefix='hmc_')

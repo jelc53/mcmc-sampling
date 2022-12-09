@@ -512,6 +512,23 @@ proposal distribution Q that we can sample from to produce a set
 of samples and corresponding weights for each. Scaling each sample 
 by its respective weight will give us posterior samples! \newline
 
+\begin{python}
+    def multistep_importance_sampling(data, n_samples, initial_position):
+    samples, weights = [initial_position], [0]
+    for it in range(n_samples):
+
+        # sample from proposal dist q
+        theta = sample_from_proposal_dist(data)
+        samples.append(theta)
+
+        # evaluate p(theta) and q(theta) to compute weight
+        p_theta = joint_posterior_density(data, theta)  # trial density
+        q_theta = compute_proposal_density(data, theta)  # proposal
+        weights.append(p_theta/q_theta)
+
+    return np.array(samples), np.array(weights)
+\end{python}
+
 The importance sampling method requires us to make a number of design 
 choices, including (a) selecting a proposal distribution, (b) whether to 
 use a normalized scheme, and (c) choice of prior for $\tau$.
@@ -549,16 +566,16 @@ use a normalized scheme, and (c) choice of prior for $\tau$.
     \begin{align*}
         p(\mu, \gamma|Y_{1,2}) & = \int_0^{\infty} p(\mu, \gamma, \sigma^2|Y_{1,2}) d\sigma^2 \\
             & \propto \int_0^{\infty} \left(\frac{1}{\sigma^2}\right)^{n_1+n_2+1} \exp\left(-\frac{1}{2\sigma^2}(\sum_{t_i=1} \|y_i-\mu\|^2_2 + \sum_{t_i=2} \|y_i-\gamma\|^2_2)\right) d\sigma^2 \\
-        \textrm{ recall  }& \frac{\Gamma(\alpha)}{\beta^\alpha} = \int_0^\infty (\sigma^2)^{-\alpha - 1} \exp\left(\frac{\beta}{\sigma^2}\right)d\sigma^2\\
+        \textrm{ recall  }\quad& \frac{\Gamma(\alpha)}{\beta^\alpha} = \int_0^\infty (\sigma^2)^{-\alpha - 1} \exp\left(\frac{\beta}{\sigma^2}\right)d\sigma^2\\
             & \propto \; \Gamma(n_1 + n_2) \left(-\frac{1}{2}  \sum_{t_i=1} \lVert y_i - \mu\rVert^2 + \sum_{t_i=2}\lVert y_i - \gamma \rVert^2\right)^{-(n_1 + n_2)} \\
             & \propto \; (\sum_{t_i=1}\lVert y_i - \overline{Y_1} \rVert^2 + \sum_{t_i=2}\lVert y_i - \overline{Y_2} \rVert^2 + n_1\lVert \overline{Y_1} - \mu \rVert^2 + n_2\lVert \overline{Y_2} - \gamma \rVert^2)^{-(n_1 + n_2)}\\
-        \textrm{ define  }& M_{\mu, \gamma} = \sum_{t_i=1}\lVert y_i - \overline{Y_1} \rVert^2 + \sum_{t_i=2}\lVert y_i - \overline{Y_2} \rVert^2\\
+        \textrm{ define  }\quad& M_{\mu, \gamma} = \sum_{t_i=1}\lVert y_i - \overline{Y_1} \rVert^2 + \sum_{t_i=2}\lVert y_i - \overline{Y_2} \rVert^2\\
             & \propto \; (M_{\mu, \gamma} + n_1\lVert \overline{Y_1} - \mu \rVert^2 + n_2\lVert \overline{Y_2} - \gamma \rVert^2)^{-(n_1 + n_2)}\\
             & \propto \; \left(M_{\mu, \gamma} + \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]^T \left(\begin{matrix*} n_1 & 0 & 0 & 0 \\ 0 & n_1 & 0 & 0 \\ 0 & 0 & n_2 & 0 \\ 0 & 0 & 0 & n_2 \end{matrix*}\right) \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]\right)^{-(n_1 + n_2)}\\
             & \propto \; \biggl(1 + \frac{2(n_1 + n_2) - 4}{M_{\mu, \gamma}(2(n_1 + n_2) - 4)}\left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]^T \left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right)^{-1} \\
             & \quad \quad \quad \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]\biggr)^{-(n_1 + n_2)}\\
             & \propto \; \left[1 + \frac{1}{\nu}(x - \eta)^T\Sigma^{-1}(x - \eta)\right]^{-\frac{\nu + 4}{2}} \quad \text{recognize t-distribution density}\\
-        \text{ where }& \nu=2(n_1 + n_2) + 4, \Sigma=\frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right), \eta=\left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\\
+        \text{ where }\quad& \nu=2(n_1 + n_2) + 4, \Sigma=\frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right), \eta=\left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\\
         \therefore p(\mu, \gamma \mid Y_{1,2}) &\sim t_4\left(\left(\begin{matrix*}
             \overline{Y_1}\\ \overline{Y_2} \end{matrix*}\right), \frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*}
             n_1^{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2^{-1} & 0 \\ 0 & 0 & 0 & n_2^{-1}
@@ -571,7 +588,7 @@ use a normalized scheme, and (c) choice of prior for $\tau$.
         n_1^{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2^{-1} & 0 \\ 0 & 0 & 0 & n_2^{-1}
         \end{matrix*}\right)\right) \cdot \text{InvGamma}\left(n_1+n_2, \quad \frac{M_{\sigma^2}}{2} \right) $$
 
-    \item \textbf{Normalized importance sampling}. xx cannot solve for closed form after groups 1 and 2
+    \item \textbf{Normalized importance sampling}. xx cannot solve for closed form after groups 1 and 2.
     Idea: let our target $p(x) = f(x) / z_p$ and $q(x) = g(x) / z_q$ where 
     we can evaluate $f(x), g(x)$ but not $p(x), q(x)$ are $z_p, z_q$ are 
     constants. \newline
