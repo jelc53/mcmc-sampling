@@ -7,6 +7,8 @@
 \usepackage{xcolor}
 \usepackage{float}
 \usepackage{dsfont}
+\usepackage{enumitem}
+\usepackage{mathtools}
 % \usepackage{breqn}
 \usepackage{graphicx}
 \usepackage[section]{placeins}
@@ -90,7 +92,8 @@ such as (a) how to propose a new sample, (b) enforcing any constraints
 we have (e.g. $\tau \in [0,1]$), and (c) choosing hyperparameters (step 
 size, burn-in).
 
-\textbf{Proposal selection}: If possible, we would like to pick a symmetric 
+\begin{enumerate}[label=(\alph*)]
+\item \textbf{Proposal selection}: If possible, we would like to pick a symmetric 
 proposal distribution to sample from (which implies a symmetric transition 
 kernel) since this will simplify computation and guarantee detail balance. 
 I used a gaussian random step with mean equal to the step size and variance 
@@ -114,7 +117,7 @@ Note: If this choice had not worked so well, I would have tried non-symmetric
 options that better mimic the expected behaviour of $tau$ and $sigma^2$ parameters
 given their constraints.
 
-\textbf{Enforcing constraints}: We had two constraints to consider: (a) $\sigma^2 > 0$ 
+\item \textbf{Enforcing constraints}: We had two constraints to consider: (a) $\sigma^2 > 0$ 
 and (b) $0 \le \tau \le 1$. I enforce these constraints in the proposal sampler function 
 but simply resampling if the proposal violates either (a) or (b). Note, this would be 
 problematic (i.e. lead to us collecting biased posterior samples) if these constraints were 
@@ -122,7 +125,7 @@ often binding, however, we can see in the results below (figure 1) that neither 
 nor $\tau$ have maximum likelihoods or significant probability density near their boundaries 
 and so the biased-ness we introduce will be minimal. 
 
-\textbf{Hyperparameters}: There are not many hyperparameters to 
+\item \textbf{Hyperparameters}: There are not many hyperparameters to 
 tune for Metropolis-Hastings, which is one of its advantages! I 
 experimented with different step sizes (0.01, 0.05, 0.1, 0.5), 
 and for each computed the acceptance ratio and number of 
@@ -131,6 +134,7 @@ burn-in). I choose a step size of 0.05 since it maximized
 number of effective samples.
 
 \begin{table}[h]
+    \centering
     \begin{tabular}{lllll}
         Step size                   & 0.01 & 0.05  & 0.1   & 0.5   \\
         Acceptance ratio            & 0.92 & 0.45  & 0.19  & 0.02  \\
@@ -141,6 +145,7 @@ number of effective samples.
 
 I did not investigate varying initialization (used $[1., 0.5, 0., 0., 0., 0.]$)
 or burn-in (fixed at 200 to match what I saw in textbook examples).
+\end{enumerate}
 
 \textbf{Results}: Using the above design choices, we produce the following 
 samples from our posterior (figure 1). These passed basic 
@@ -265,14 +270,15 @@ choices, including (a) whether to use an acceptance criterion,
 (b) enforcing any constraints we have (e.g. $\tau \in [0,1]$), 
 and (c) choosing hyperparameters (step size, momentum).
 
-\textbf{Acceptance criterion}: My first implementation did not 
+\begin{enumerate}[label=(\alph*)]
+\item \textbf{Acceptance criterion}: My first implementation did not 
 include an acceptance step which was faster to evaluate but did 
 not produce sensible, unbiased posterior samples. Adding the 
 metropolis acceptance criterion at the end of each iteration 
 helped to correct for errors introduced via numerical 
 integration.
 
-\textbf{Enforcing constraints}: We had two constraints to consider: 
+\item \textbf{Enforcing constraints}: We had two constraints to consider: 
 (a) $\sigma^2 > 0$ and (b) $0 \le \tau \le 1$. I enforce these 
 constraints in the q ($\theta$) update function by creating a 
 "hard wall" or barrier, where we assume both $p$ (momentum) and 
@@ -296,7 +302,7 @@ def q_update(q, p, M_mat, step_size):
     return q_prop, p
 \end{python}
 
-\textbf{Hyperparameters}: I experimented with different step 
+\item \textbf{Hyperparameters}: I experimented with different step 
 sizes (0.005, 0.01, 0.05) and momentum variance values (1, 5, 10). 
 For each combination I computed the acceptance ratio and number of 
 effective (uncorrelated) samples for 300 sample test (after 
@@ -305,6 +311,7 @@ burn-in of 200). I choose a (step size, momentum) pair of
 excluding experiments with low acceptance (e.g. (0.05, 1)).
 
 \begin{table}[H]
+    \centering
     \begin{tabular}{llll}
         Step size    & Momentum     & Accept ratio      & Eff. samples          \\
         0.005        & 1            & 0.98              & 73.8                  \\ 
@@ -322,6 +329,7 @@ excluding experiments with low acceptance (e.g. (0.05, 1)).
 I did not investigate varying initialization (used $[1., 0.5, 0., 0., 0., 0.]$), 
 burn-in (fixed at 200 to match what I saw in textbook examples) or path length
 (used 1 as set number of leapfrog steps eual to path length / step size).
+\end{enumerate}
 
 \textbf{Results}: Using the above design choices, we produce the following 
 samples from our posterior (figure 3).
@@ -353,14 +361,16 @@ random steps through the posterior.
 
 \section{Gibbs Sampling}
 To implement the Gibbs Sampling we need to derive the conditional 
-distributions from which to sample. \newline
+distributions for each parameter from which to sample. 
 
 \textbf{Conditional distributions} Idea: start with joint posterior 
 density, then remove constants (e.g. terms with only fixed parameters) 
 and rearrange to derive density conditional distribution we can sample 
 from. To simplify notation, let $\theta[-x]$ represent all parameters 
 of $\theta$ exluding parameter $x$ and let $y_i'$ represent centered data 
-(e.g. $y_1' = y_1 - \mu$).  
+(e.g. $y_1' = y_1 - \mu$). \newline
+
+Derive conditional distribution for $\sigma^2$.
 \begin{align*}
     p(\sigma^2|y,\theta[-\sigma^2]) & \propto \prod_{t_i=1} N(\mu, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=2} N(\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=3} N(0.5\mu + 0.5\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=4} N(\tau\mu + (1-\tau)\gamma, \sigma^2 \mathbb{I}) \cdot p(\sigma^2) \\
         & \propto |\sigma^2 \mathbb{I}_2|^{-n/2} \cdot \frac{1}{\sigma^2} \cdot \exp\left(-\frac{1}{2\sigma^2}\sum_{i=1}^n y_i'^T \mathbb{I}^{-1} y_i'\right) \\
@@ -369,6 +379,7 @@ of $\theta$ exluding parameter $x$ and let $y_i'$ represent centered data
     \therefore \sigma^2 | y, \theta[-\sigma^2] & \sim \text{InvGamma}\left(n, \quad \frac{1}{2} \sum_{i=1}^n \|y_i'\|^2_2\right)
 \end{align*}
 
+Derive conditional distribution for $\tau$.
 \begin{align*}
     p(\tau|y,\theta[-\tau]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i=4} (y_i - (\tau\mu + (1-\tau)\gamma))^T \mathbb{I}^{-1} (y_i - (\tau\mu + (1-\tau)\gamma)) \right)\\
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \sum_{t_i=4} (\tau \vec{i} - \alpha_i)^T \mathbb{I}^{-1} (\tau \vec{i} - \alpha_i) \right) && \text{let $\vec{i} = (1, 1)$} \\
@@ -378,6 +389,7 @@ of $\theta$ exluding parameter $x$ and let $y_i'$ represent centered data
 \end{align*}
 $$\therefore \tau | y, \theta[-\tau] \sim \text{TruncNormal}\left(\frac{\sum_{t_i=4} \alpha_i}{n_4}, \frac{\sigma^2}{n_4 \|\gamma - \mu\|^2_2}, 0, 1\right) \quad \text{where } \alpha_i = y_i^T \mu - \gamma^T\gamma - y_i^T\gamma - \mu^T\gamma$$
 
+Derive conditional distribution for $\mu$.
 \begin{align*}
     p(\mu|y,\theta[-\mu]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{1,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) && \text{$\bar{y}_i$ = group mean}\\
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} (\mu - \bar{\mu}_i^{t_i})^T \mathbb{I}^{-1} (\mu - \bar{\mu}_i^{t_i}) \right) && \text{rearrange for $\mu$}\\
@@ -389,6 +401,7 @@ $$\therefore \tau | y, \theta[-\tau] \sim \text{TruncNormal}\left(\frac{\sum_{t_
     \text{where} & \quad \bar{\mu}_i^{t=1} = y_i \text{;} \quad \bar{\mu}_i^{t=3} = (y_i - 0.5\gamma) / 0.5 \text{;} \quad \bar{\mu}_i^{t=4} = (y_i - (1-\tau)\gamma) / \tau 
 \end{align*}
 
+Derive conditional distribution for $\gamma$.
 \begin{align*}
     p(\gamma|y,\theta[-\gamma]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{2,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) \\ %&& \text{$\bar{y}_i$ = group mean}\\
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} (\gamma - \bar{\gamma}_i^{t_i})^T \mathbb{I}^{-1} (\gamma - \bar{\gamma}_i^{t_i}) \right) \\ %&& \text{rearrange for $\gamma$}\\
@@ -443,17 +456,19 @@ is no hyperparameter tuning for step size here because
 we take a completely new sample (from an adaptive proposal 
 distribution) at each step.
 
-\textbf{Systematic vs random scan}: While random scan ensures 
+\begin{enumerate}[label=(\alph*)]
+\item \textbf{Systematic vs random scan}: While random scan ensures 
 detail balance of our markov chain, I preferred to use a 
 systematic scan since it was more efficient, especially over 
 smaller sampling experiments (guarantees an equal number of 
 updates for each).
 
-\textbf{Block updates for mu and gamma}: Since $\mu_1, \mu_2$ 
+\item \textbf{Block updates for mu and gamma}: Since $\mu_1, \mu_2$ 
 and $\gamma_1, \gamma_2$ would always come from the same 
 distribution I found it more efficient to update these together, 
 drawing from a 2-dim multivariate normal rather than separately. 
 This does mean that our proposals
+\end{enumerate}
 
 \textbf{Results}: Using the above design choices, we produce the following 
 samples from our posterior (figure 5).
@@ -482,17 +497,109 @@ still surpasses MH but is almost 1/3 of our HMC result.
 
 
 
-\section{Importance Sampling} xx
+\section{Importance Sampling}
+
+Importance Sampling is typically used to estimate summary statistics. 
+For example, if $I_A(x)$ is the indicator function of x lying in 
+some region A, and we know the target density $p(x)$, we can pick a 
+proposal distribution $Q$ to sample from and weight our samples 
+in the following way.
+$$ E[I_A(x)] = \int I_A(x) p(x) dx = \int I_A(x) \frac{p(x)}{q(x)} q(x) dx \approx \frac{1}{n} \sum I_A(x) \frac{p(x)}{q(x)} $$ 
+
+Adapting this theory to our problem, we want to derive our target 
+density $p(\theta|y)$ (likliehood x prior) and find a suitable 
+proposal distribution Q that we can sample from to produce a set 
+of samples and corresponding weights for each. Scaling each sample 
+by its respective weight will give us posterior samples! \newline
+
+The importance sampling method requires us to make a number of design 
+choices, including (a) selecting a proposal distribution, (b) whether to 
+use a normalized scheme, and (c) choice of prior for $\tau$.
+
+\begin{enumerate}[label=(\alph*)]
+    \item \textbf{Proposal distribution}. Want to find a proposal distribution that is as similar 
+    as possible (but with greater variance) to distribution described by our target density. 
+    Idea: split evaluation of the posterior into two separate steps: 
+    \begin{itemize}
+        \item \textbf{Step 1}: Use only groups 1 and 2 to generate a closed form partial posterior ($\mu, \gamma, \sigma^2$ only). Combine with some $p(\tau)$ to generate our proposal distribution Q
+        \item \textbf{Step 2}: Use output from step 1 as our new prior, then update using likelihood of data from groups 3 and 4 given parameters $\theta$ to generate our target density (equivalent to joint posterior) 
+    \end{itemize}
+
+    This two-step approach is attractive because it uses our data effectively to inform 
+    our proposal distribution. Let $\theta = (\mu, \gamma, \tau, \sigma^2)$.
+    \begin{align*}
+        p(\theta|Y_{1,2,3,4}) & \propto p(\mu, \gamma, \sigma^2|Y_{1,2}) \cdot p(\tau) \cdot L(Y_{3,4}|\theta) \\
+            & \propto p(\mu, \gamma, \sigma^2|Y_{1,2}) \cdot p(\tau) \cdot \prod_{t\in{3,4}} p(y_i|\theta) \\
+            & \propto q(\theta) \cdot \prod_{t_i\in{3,4}} p(y_i|\theta) && \text{choose proposal $q(\theta)$}
+    \end{align*}
+
+    Want to find closed form distribution for $p(\mu, \gamma, \sigma^2|Y_{1,2})$. 
+    First recognize we can separate $\sigma^2$ from $\mu$ and $\gamma$.
+    $$ p(\mu, \gamma, \sigma^2|Y_{1,2}) = p(\mu, \gamma|Y_{1,2}) \cdot p(\sigma^2|\mu, \gamma, Y_{1,2}) $$
+    
+    Derive $p(\sigma^2|\mu, \gamma, Y_{1,2})$: $\sigma^2$ conditional on $\mu$, $\gamma$ and groups 1, 2.
+    \begin{align*}
+        p(\sigma^2|\mu, \gamma, Y_{1,2}) & \propto \frac{1}{\sigma^2} \cdot \left(\frac{1}{\sigma^2}\right)^{n_1 + n_2} \exp\left(-\frac{1}{2\sigma^2}(\sum_{t_i=1} \|y_i-\mu\|^2_2 + \sum_{t_i=2} \|y_i-\gamma\|^2_2)\right) \\
+            & \text{let $M_{\sigma^2}=\sum_{t_i=1} \|y_i-\mu\|^2_2 + \sum_{t_i=2} \|y_i-\gamma\|^2_2$} \\
+            & \propto \left(\frac{1}{\sigma^2}\right)^{n_1 + n_2 + 1} \exp\left(-\frac{M_{\sigma^2}}{2} \cdot \frac{1}{\sigma^2}\right) \\
+            & \propto \text{InvGamma}\left(n_1+n_2, \quad \frac{M_{\sigma^2}}{2} \right)
+    \end{align*}
+
+    Derive $p(\mu, \gamma|Y_{1,2})$: the marginal distribution of $\mu$ and $\gamma$.
+    \begin{align*}
+        p(\mu, \gamma|Y_{1,2}) & = \int_0^{\infty} p(\mu, \gamma, \sigma^2|Y_{1,2}) d\sigma^2 \\
+            & \propto \int_0^{\infty} \left(\frac{1}{\sigma^2}\right)^{n_1+n_2+1} \exp\left(-\frac{1}{2\sigma^2}(\sum_{t_i=1} \|y_i-\mu\|^2_2 + \sum_{t_i=2} \|y_i-\gamma\|^2_2)\right) d\sigma^2 \\
+        \textrm{ recall  }& \frac{\Gamma(\alpha)}{\beta^\alpha} = \int_0^\infty (\sigma^2)^{-\alpha - 1} \exp\left(\frac{\beta}{\sigma^2}\right)d\sigma^2\\
+            & \propto \; \Gamma(n_1 + n_2) \left(-\frac{1}{2}  \sum_{t_i=1} \lVert y_i - \mu\rVert^2 + \sum_{t_i=2}\lVert y_i - \gamma \rVert^2\right)^{-(n_1 + n_2)} \\
+            & \propto \; (\sum_{t_i=1}\lVert y_i - \overline{Y_1} \rVert^2 + \sum_{t_i=2}\lVert y_i - \overline{Y_2} \rVert^2 + n_1\lVert \overline{Y_1} - \mu \rVert^2 + n_2\lVert \overline{Y_2} - \gamma \rVert^2)^{-(n_1 + n_2)}\\
+        \textrm{ define  }& M_{\mu, \gamma} = \sum_{t_i=1}\lVert y_i - \overline{Y_1} \rVert^2 + \sum_{t_i=2}\lVert y_i - \overline{Y_2} \rVert^2\\
+            & \propto \; (M_{\mu, \gamma} + n_1\lVert \overline{Y_1} - \mu \rVert^2 + n_2\lVert \overline{Y_2} - \gamma \rVert^2)^{-(n_1 + n_2)}\\
+            & \propto \; \left(M_{\mu, \gamma} + \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]^T \left(\begin{matrix*} n_1 & 0 & 0 & 0 \\ 0 & n_1 & 0 & 0 \\ 0 & 0 & n_2 & 0 \\ 0 & 0 & 0 & n_2 \end{matrix*}\right) \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]\right)^{-(n_1 + n_2)}\\
+            & \propto \; \biggl(1 + \frac{2(n_1 + n_2) - 4}{M_{\mu, \gamma}(2(n_1 + n_2) - 4)}\left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]^T \left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right)^{-1} \\
+            & \quad \quad \quad \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]\biggr)^{-(n_1 + n_2)}\\
+            & \propto \; \left[1 + \frac{1}{\nu}(x - \eta)^T\Sigma^{-1}(x - \eta)\right]^{-\frac{\nu + 4}{2}} \quad \text{recognize t-distribution density}\\
+        \text{ where }& \nu=2(n_1 + n_2) + 4, \Sigma=\frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right), \eta=\left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\\
+        \therefore p(\mu, \gamma \mid Y_{1,2}) &\sim t_4\left(\left(\begin{matrix*}
+            \overline{Y_1}\\ \overline{Y_2} \end{matrix*}\right), \frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*}
+            n_1^{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2^{-1} & 0 \\ 0 & 0 & 0 & n_2^{-1}
+            \end{matrix*}\right)\right)
+    \end{align*}
+
+    Putting these parts together we have the following proposal distribution,
+    $$ q(\theta) \sim t_4\left(\left(\begin{matrix*}
+        \overline{Y_1}\\ \overline{Y_2} \end{matrix*}\right), \frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*}
+        n_1^{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2^{-1} & 0 \\ 0 & 0 & 0 & n_2^{-1}
+        \end{matrix*}\right)\right) \cdot \text{InvGamma}\left(n_1+n_2, \quad \frac{M_{\sigma^2}}{2} \right) $$
+
+    \item \textbf{Normalized importance sampling}. xx cannot solve for closed form after groups 1 and 2
+    Idea: let our target $p(x) = f(x) / z_p$ and $q(x) = g(x) / z_q$ where 
+    we can evaluate $f(x), g(x)$ but not $p(x), q(x)$ are $z_p, z_q$ are 
+    constants. \newline
+
+    If we draw $x_i$ $i=1,2,...n$ iid samples from Q distribution, then compute 
+    weights $u_i = f(x_i) / g(x_i)$ and apply these to our samples, we can 
+    recover the weights as if we had been able to evaluate $p(x)$ and 
+    directly compute $w_i = p(x_i) / q(x_i)$:
+    $$ \hat{x_i} = \frac{x_i \cdot w_i}{\sum_{i=1}^n w_i} = \frac{\frac{z_p}{z_q} \cdot x_i \cdot \frac{f(x_i)}{g(x_i)}}{\sum_{i=1}^n \frac{f(x_i)}{g(x_i)}} = \frac{x_i \cdot u_i}{\sum_{i=1}^n u_i}$$
+
+    This is important for our particular problem since it is not possible 
+    to compute the closed form posterior (target density) adn so instead 
+    we need to make do with some $f(x) \propto p(x)$, which we take to be
+    the likelihood x prior.
+
+    \item \textbf{Choice of tau prior}. While we were able to solve for a 
+    closed form of the posterior for groups 1 and 2, this does not give us 
+    any additional information about $\tau$ to use as a prior for Step 2. 
+    I tried both using a beta centered at zero $\text{Beta}(5, 2)$ and a 
+    beta centered at 0.8 $\text{Beta}(5, 2)$ where we know $\tau$ should 
+    be from our other sampling experiments.  
+\end{enumerate}
+
 
 \section{Comparison of methodologies} Autocorrelation, speed to evaluate, sample efficiency,
  biased estimator, ...table!
  
 
-% \begin{figure}[!htbp]
-%     \centering
-%     \includegraphics[scale=0.7]{global_0000.png}
-%     \caption{3D surface plot of temperature at iteration 0}
-% \end{figure}
 
 
 \end{document}
