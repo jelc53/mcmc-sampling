@@ -144,7 +144,7 @@ if __name__ == '__main__':
     variance = np.sum(np.square(samples - np.mean(samples, axis=0)) * np.reshape(w, (w.shape[0],1)), axis=0)
     print('Mean of weighted samples: {}'.format(np.sum(theta_hat, axis=0)))
     print('Variance of weighted samples: {}'.format(variance))
-    np.save('mis_weighted_samples.npy', theta_hat)
+    # np.save('mis_weighted_samples.npy', theta_hat)
 
     vals, bins = prepare_histogram_sample_data(samples, w)
     generate_posterior_barcharts(vals, bins, prefix='mis_')

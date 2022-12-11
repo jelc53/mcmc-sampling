@@ -143,8 +143,8 @@ if __name__ == '__main__':
         0.3  # gam2
     ])
 
-    n_samples = 5000
-    burn_in = 200
+    n_samples = 600
+    burn_in = 100
     path_len = 1
     m = 1
     step_size = 0.01
@@ -160,9 +160,9 @@ if __name__ == '__main__':
     #         print('Acceptance ratio: {}'.format(accept_ratio))
     #         print('Number of effective samples: {}'.format(ess))
     #         print('Effective sample mean: {}'.format(ess.mean()))
-            # np.save('hmc_samples.npy', samples)
-    samples, accept_ratio = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
-    np.save('hmc_samples.npy', samples)
-    # samples = np.load('../output/hmc_samples.npy')
+
+    # samples, accept_ratio = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
+    # np.save('hmc_samples.npy', samples)
+    samples = np.load('../output/hmc_samples.npy')
     generate_traceplots(samples[burn_in:], prefix='hmc_')
     generate_posterior_histograms(samples[burn_in:], prefix='hmc_')

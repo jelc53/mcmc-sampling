@@ -137,8 +137,8 @@ number of effective samples.
     \centering
     \begin{tabular}{lllll}
         Step size                   & 0.01 & 0.05  & 0.1   & 0.5   \\
-        Acceptance ratio            & 0.92 & 0.45  & 0.19  & 0.02  \\
-        Number of effective samples & 4.53 & 16.64 & 9.97  & 6.96  \\
+        Acceptance ratio            & 0.87 & 0.44  & 0.22  & 0.02  \\
+        Mean effective samples      & 3.5  & 16.6  & 14.6  & 6.96  \\
                                     &      &       &       &         
     \end{tabular}
 \end{table}
@@ -154,9 +154,17 @@ their respective bounds, lower variance as we increase number
 of samples, and minimal density on boundary of $\tau$ as hoped.
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.7]{mh_sampled_histogram.png}
+    \includegraphics[scale=0.55]{mh_sampled_histogram.png}
     \caption{Histogram of Metropolis-Hastings posterior samples}
 \end{figure}
+
+\begin{table}[H] %TODO
+    \begin{tabular}{lcccccc}
+    \multicolumn{1}{c}{}         & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
+    Mean of weighted samples     & 0.20  & 0.88  & -1.42 & -0.66 & -0.27 & 0.34  \\
+    Variance of weighted samples & 0.022 & 0.004 & 0.020 & 0.077 & 0.044 & 0.058
+    \end{tabular}
+\end{table}
 
 The traceplots in figure 2 give an indication of how well the sampler 
 explored the posterior density. I am comforted by the fact that 
@@ -164,7 +172,7 @@ there are no long periods of repeated values (getting stuck)
 despite an acceptance rate of only 0.45.
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.7]{mh_sampled_traceplot.png}
+    \includegraphics[scale=0.55]{mh_sampled_traceplot.png}
     \caption{Traceplot for Metropolis-Hastings sampling}
 \end{figure}
 
@@ -303,26 +311,25 @@ def q_update(q, p, M_mat, step_size):
 \end{python}
 
 \item \textbf{Hyperparameters}: I experimented with different step 
-sizes (0.005, 0.01, 0.05) and momentum variance values (1, 5, 10). 
+sizes (0.005, 0.01) and momentum variance values (1, 5, 10). 
 For each combination I computed the acceptance ratio and number of 
-effective (uncorrelated) samples for 300 sample test (after 
+effective (uncorrelated) samples for 500 sample test (after 
 burn-in of 200). I choose a (step size, momentum) pair of 
-(0.005, 10) since it maximized number of effective samples, 
-excluding experiments with low acceptance (e.g. (0.05, 1)).
+(0.01, 5) since it maximized number of effective samples while 
+maintaining reasonable acceptance. Note, for higher step sizes 
+(e.g 0.05) my algorithm would run into numerical instability issues 
+so I did not test further in this direction.
 
 \begin{table}[H]
     \centering
     \begin{tabular}{llll}
-        Step size    & Momentum     & Accept ratio      & Eff. samples          \\
-        0.005        & 1            & 0.98              & 73.8                  \\ 
-        0.005        & 5            & 0.99              & 139.4                 \\
-        0.005        & 10           & 0.99              & 11.5                  \\
-        0.01         & 1            & 0.97              & 66.3                  \\
-        0.01         & 5            & 0.98              & 99.8                  \\
-        0.01         & 10           & 0.97              & 55.91                 \\
-        0.05         & 1            & 0.004             & 300                   \\
-        0.05         & 15           & 0.64              & 112.7                 \\
-        0.05         & 10           & 0.91              & 74.8                  \\      
+        Step size    & Momentum     & Accept ratio      & Mean eff. samples     \\
+        0.005        & 1            & 0.97              & 138                   \\ 
+        0.005        & 5            & 0.83              & 159                   \\
+        0.005        & 10           & 0.80              & 30                    \\
+        0.01         & 1            & 0.92              & 124                   \\
+        0.01         & 5            & 0.76              & 195                   \\
+        0.01         & 10           & 0.69              & 10                    \\    
     \end{tabular}
 \end{table}
 
@@ -335,9 +342,17 @@ burn-in (fixed at 200 to match what I saw in textbook examples) or path length
 samples from our posterior (figure 3).
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.7]{hmc_sampled_histogram.png}
+    \includegraphics[scale=0.55]{hmc_sampled_histogram.png}
     \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
 \end{figure}
+
+\begin{table}[H] %TODO
+    \begin{tabular}{lcccccc}
+    \multicolumn{1}{c}{}         & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
+    Mean of weighted samples     & 0.20  & 0.88  & -1.42 & -0.66 & -0.27 & 0.34  \\
+    Variance of weighted samples & 0.022 & 0.004 & 0.020 & 0.077 & 0.044 & 0.058
+    \end{tabular}
+\end{table}
 
 The traceplots in figure 4 give an indication of how well the sampler 
 explored the posterior density. I am comforted by the fact that 
@@ -345,7 +360,7 @@ there are no long periods of repeated values (getting stuck)
 despite us not implementing no-turn logic. 
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.7]{hmc_sampled_traceplot.png}
+    \includegraphics[scale=0.55]{hmc_sampled_traceplot.png}
     \caption{Traceplot for Hamiltonian Monte Carlo sampling}
 \end{figure}
 
@@ -474,9 +489,17 @@ This does mean that our proposals
 samples from our posterior (figure 5).
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.7]{gibbs_sampled_histogram.png}
+    \includegraphics[scale=0.55]{gibbs_sampled_histogram.png}
     \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
 \end{figure}
+
+\begin{table}[H] %TODO
+    \begin{tabular}{lcccccc}
+    \multicolumn{1}{c}{}         & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
+    Mean of weighted samples     & 0.20  & 0.88  & -1.42 & -0.66 & -0.27 & 0.34  \\
+    Variance of weighted samples & 0.022 & 0.004 & 0.020 & 0.077 & 0.044 & 0.058
+    \end{tabular}
+\end{table}
 
 The traceplots in figure 6 give an indication of how well the sampler 
 explored the posterior density. I am comforted by the fact that 
@@ -484,7 +507,7 @@ there are no long periods of repeated values (getting stuck)
 despite us not implementing no-turn logic. 
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.7]{gibbs_sampled_traceplot.png}
+    \includegraphics[scale=0.55]{gibbs_sampled_traceplot.png}
     \caption{Traceplot for Hamiltonian Monte Carlo sampling}
 \end{figure}
 
@@ -543,7 +566,8 @@ use a normalized scheme, and (c) choice of prior for $\tau$.
     \end{itemize}
 
     This two-step approach is attractive because it uses our data effectively to inform 
-    our proposal distribution. Let $\theta = (\mu, \gamma, \tau, \sigma^2)$.
+    our proposal distribution. We will also see that it simplifies our weight calculation. 
+    Let $\theta = (\mu, \gamma, \tau, \sigma^2)$.
     \begin{align*}
         p(\theta|Y_{1,2,3,4}) & \propto p(\mu, \gamma, \sigma^2|Y_{1,2}) \cdot p(\tau) \cdot L(Y_{3,4}|\theta) \\
             & \propto p(\mu, \gamma, \sigma^2|Y_{1,2}) \cdot p(\tau) \cdot \prod_{t\in{3,4}} p(y_i|\theta) \\
@@ -588,45 +612,71 @@ use a normalized scheme, and (c) choice of prior for $\tau$.
         n_1^{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2^{-1} & 0 \\ 0 & 0 & 0 & n_2^{-1}
         \end{matrix*}\right)\right) \cdot \text{InvGamma}\left(n_1+n_2, \quad \frac{M_{\sigma^2}}{2} \right) $$
 
-    \item \textbf{Normalized importance sampling}. xx cannot solve for closed form after groups 1 and 2.
+    \item \textbf{Normalized importance sampling}. Note that we cannot solve 
+    for closed form distribution of our joint posterior after groups 1 and 2. 
     Idea: let our target $p(x) = f(x) / z_p$ and $q(x) = g(x) / z_q$ where 
     we can evaluate $f(x), g(x)$ but not $p(x), q(x)$ are $z_p, z_q$ are 
     constants. \newline
 
-    If we draw $x_i$ $i=1,2,...n$ iid samples from Q distribution, then compute 
-    weights $u_i = f(x_i) / g(x_i)$ and apply these to our samples, we can 
+    If we draw $x_j$ $j=1,2,...n$ iid samples from Q distribution, then compute 
+    weights $u_j = f(x_j) / g(x_j)$ and apply these to our samples, we can 
     recover the weights as if we had been able to evaluate $p(x)$ and 
-    directly compute $w_i = p(x_i) / q(x_i)$:
-    $$ \hat{x_i} = \frac{x_i \cdot w_i}{\sum_{i=1}^n w_i} = \frac{\frac{z_p}{z_q} \cdot x_i \cdot \frac{f(x_i)}{g(x_i)}}{\sum_{i=1}^n \frac{f(x_i)}{g(x_i)}} = \frac{x_i \cdot u_i}{\sum_{i=1}^n u_i}$$
+    directly compute $w_j = p(x_j) / q(x_j)$:
+    $$ \hat{x_j} = \frac{h(x_j) \cdot w_j}{\sum_{i=1}^n w_j} = \frac{\frac{z_p}{z_q} \cdot h(x_j) \cdot \frac{f(x_j)}{g(x_j)}}{\sum_{i=1}^n \frac{f(x_j)}{g(x_j)}} = \frac{h(x_j) \cdot u_j}{\sum_{j=1}^n u_j}$$
 
     This is important for our particular problem since it is not possible 
-    to compute the closed form posterior (target density) adn so instead 
+    to compute the closed form posterior (target density) and so instead 
     we need to make do with some $f(x) \propto p(x)$, which we take to be
-    the likelihood x prior.
+    the likelihood x prior. \newline
+    
+    Note our choice of $q(\theta)$  simplies the weight calculation to just
+    evaluating the likelihood of groups 3 and 4 given the samples $\theta_j$ 
+    from proposal distribution $q$.
+    $$ u_j = \frac{f(\theta_j)}{g(\theta_j)} = \frac{p(\theta_j|Y_{1,2,3,4})}{p(\mu_j, \gamma_j, \sigma_j^2|Y_{1,2}) \cdot p(\tau_j)} = \frac{q(\theta_j) \cdot \prod_{t_i\in{3,4}} p(y_i|\theta_j)}{q(\theta_j)} = \prod_{t_i\in{3,4}} p(y_i|\theta_j) $$
 
     \item \textbf{Choice of tau prior}. While we were able to solve for a 
     closed form of the posterior for groups 1 and 2, this does not give us 
     any additional information about $\tau$ to use as a prior for Step 2. 
-    I tried both using a beta centered at zero $\text{Beta}(5, 2)$ and a 
-    beta centered at 0.8 $\text{Beta}(5, 2)$ where we know $\tau$ should 
-    be from our other sampling experiments.  
+    I tried both using a beta centered at zero $\text{Beta}(5, 5)$ and a 
+    beta centered at 0.9 $\text{Beta}(20, 3)$ (closer to the MLE estimate).
+    As expected the latter worked much better since it generated more 
+    samples closer to our target.
+
 \end{enumerate}
 
-Choice of proposal enables us to directly compute weights without eval densities (cancel)
-Expectation for each binned region of marginal posterior
-Fast, because extremely parallelizable
-Beta prior for tau
+\textbf{Results}: Using the above design choices we want to generate 
+the posterior marginals for our parameters $\theta$. Unlike for our other 
+sampling methods, we do not get these as a direct output from the algorithm.
+Idea: specify a set of binned regions ($A$) for each parameter  that cover 
+the region of posterior marginal density, then use our samples $\theta_j$ 
+from proposal distribution $q$ and corresponding weights $w_j$ to compute 
+$\mathbb{E}[I_A(\theta)]$ for each region $A$. These "expectations of indicator 
+functions" are the probabilities of a given parameter falling in region $A$, which 
+we can now plot in a histogram as individual bars in our marginal posterior histogram.   
+$$ \mathbb{E_{\theta \sim p}}[I_A(\theta)] = \frac{1}{n} \sum_j I_A(\theta_i) \frac{p(\theta_i)}{q(\theta_i)} = \frac{1}{n} \sum_i I_A(\theta_i) \frac{f(\theta_i)}{g(\theta_i)} = \frac{1}{n} \sum_i I_A(\theta_i) u_i$$
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.55]{mis_sampled_histogram.png}
+    \caption{Histogram of Importance Sampling posterior samples}
+\end{figure}
 
-Remember beta prior for HMC tau is good bc differentiable everywhere ... alternative is wall reflection (particle physics) 
-Remember MH truncnorm (non-symmetric transition kernel) is better than extra rejection criteria for constraints
-Add mean and variance (first and second moments) to all analyses
-plots should be 2, 3
+\begin{table}[H]
+    \begin{tabular}{lcccccc}
+    \multicolumn{1}{c}{}         & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
+    Mean of weighted samples     & 0.20  & 0.88  & -1.42 & -0.66 & -0.27 & 0.34  \\
+    Variance of weighted samples & 0.022 & 0.004 & 0.020 & 0.077 & 0.044 & 0.058
+    \end{tabular}
+\end{table}
 
+\textbf{Final remarks}. Fast, because extremely parallelizable ...
+...
 
 \section{Comparison of methodologies} Autocorrelation, speed to evaluate, sample efficiency,
  biased estimator, ...table!
  
-
+ Remember beta prior for HMC tau is good bc differentiable everywhere ... alternative is wall reflection (particle physics) 
+ Remember MH truncnorm (non-symmetric transition kernel) is better than extra rejection criteria for constraints
+ Add mean and variance (first and second moments) to all analyses
 
 
 \end{document}

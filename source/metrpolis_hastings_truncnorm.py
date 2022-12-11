@@ -102,20 +102,22 @@ if __name__ == '__main__':
     ])
 
     step_size = 0.05
-    n_samples = 5000
+    n_samples = 700
     burn_in = 200
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
 
-    # for step_size in [np.ones(6)*0.01, np.ones(6)*0.05, np.ones(6)*0.1, np.ones(6)*0.5]:
-    samples, accept_ratio = metropolis_hastings(data, n_samples, step_size, initial_position)
-    arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
-    ess = arviz.ess(arviz_data_format)
-    print('Acceptance ratio: {}'.format(accept_ratio))
-    print('Number of effective samples: {}'.format(ess))
-    print('Effective sample mean: {}'.format(ess.mean()))
-    np.save('mh_samples_truncnorm.npy', samples)
-    # samples = np.load('../output/mh_samples.npy')
+    for step_size in [0.01, 0.05, 0.1, 0.5]:
+        samples, accept_ratio = metropolis_hastings(data, n_samples, step_size, initial_position)
+        arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
+        ess = arviz.ess(arviz_data_format)
+        print('Acceptance ratio: {}'.format(accept_ratio))
+        print('Number of effective samples: {}'.format(ess))
+        print('Effective sample mean: {}'.format(ess.mean()))
+
+    # samples, accept_ratio = metropolis_hastings(data, n_samples, step_size, initial_position)
+    # np.save('mh_samples_truncnorm.npy', samples)
+    samples = np.load('../output/mh_samples.npy')
     generate_traceplots(samples[burn_in:], prefix='mh_')
     generate_posterior_histograms(samples[burn_in:], prefix='mh_')
