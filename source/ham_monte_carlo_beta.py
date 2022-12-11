@@ -164,5 +164,7 @@ if __name__ == '__main__':
     # samples, accept_ratio = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
     # np.save('hmc_samples.npy', samples)
     samples = np.load('../output/hmc_samples.npy')
+    print('Mean of posterior samples: {}'.format(np.mean(samples, axis=0)))
+    print('Variance of posterior samples: {}'.format(np.var(samples, axis=0)))
     generate_traceplots(samples[burn_in:], prefix='hmc_')
     generate_posterior_histograms(samples[burn_in:], prefix='hmc_')

@@ -181,6 +181,9 @@ if __name__ == '__main__':
     # print('Number of effective samples: {}'.format(ess))
     # print('Effective sample mean: {}'.format(ess.mean()))
     # np.save('gibbs_samples.npy', samples)
+
     samples = np.load('../output/gibbs_samples.npy')
+    print('Mean of posterior samples: {}'.format(np.mean(samples, axis=0)))
+    print('Variance of posterior samples: {}'.format(np.var(samples, axis=0)))
     generate_traceplots(samples[burn_in:], prefix='gibbs_')
     generate_posterior_histograms(samples[burn_in:], prefix='gibbs_')
