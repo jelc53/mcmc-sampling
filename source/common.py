@@ -16,6 +16,43 @@ def log_normal(x, mu=0, sigma=1):
     return np.sum(np.log(numerator/denominator))
 
 
+def prepare_histogram_sample_data(theta, w):
+    """Helper function to prepare bins for histogram"""
+    n = 100
+    bins = np.stack([
+        np.linspace(0, 0.5, n),
+        np.linspace(0, 1, n),
+        np.linspace(-2, 0, n),
+        np.linspace(-2, 0, n),
+        np.linspace(-1, 1, n),
+        np.linspace(-1, 1, n)]).T
+    i = 10
+    j = 2
+
+    vals = np.zeros([n, theta.shape[1]])
+    for j in range(theta.shape[1]):
+        for i in range(n-1):
+            vals[i,j] += [np.sum(((theta[:,j] >= bins[i,j]) & (theta[:,j] < bins[i+1,j])*1) * w)]
+
+    return vals, bins
+
+
+def generate_posterior_barcharts(vals, bins, prefix=''):
+    """Create and save marginal histograms for each parameter from sampled posterior"""
+    param_names = ['sigma_sq', 'tau', 'mu1', 'mu2', 'gam1', 'gam2']
+    fig, ax = plt.subplots(6, 1, figsize=(8, 12))
+    n=100
+
+    for j in range(bins.shape[1]):
+        ax[j].bar(x=bins[:,j], height=vals[:,j], width=(bins[:,j].max() - bins[:,j].min())/n)
+        ax[j].set_xlabel(param_names[j])
+        # ax[j].set_ylim([0, 0.1])
+    plt.tight_layout()
+    outfile = prefix + 'sampled_histogram.png'
+    plt.savefig(os.path.join(os.path.pardir, 'output', outfile))
+    plt.show(); plt.close()
+
+
 def generate_traceplots(samples, prefix=''):
     """Create and save traceplots for each parameter from sampling algorithm"""
     n_samples = len(samples)-1
@@ -77,8 +114,8 @@ def negative_log_prob(data, theta):
     """Compute negative log probability evaluated at a given theta"""
     n, k = data[['X1', 'X2']].shape
     sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
-    mu = np.array([mu1, mu2])
-    gam = np.array([gam1, gam2])
+    mu = np.array([mu1, mu2]).reshape(1,-1)
+    gam = np.array([gam1, gam2]).reshape(1,-1)
 
     # center data
     centered_data = center_data(mu, gam, tau, data)
@@ -90,6 +127,26 @@ def negative_log_prob(data, theta):
     output = norm_term + sigma_term + (0.5/sigma_sq)*posterior_term
 
     return output
+
+
+def log_likelihood(data, theta):
+    """Compute log likelihood given data and params"""
+    sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
+    X, t = fetch_data(data)
+    mu = [mu1, mu2]
+    gam = [gam1, gam2]
+
+    means = np.zeros_like(X)
+    means[t == 1] = mu
+    means[t == 2] = gam
+    means[t == 3] = [x + y for x, y in zip([0.5 * x for x in mu], [0.5 * x for x in gam])]
+    means[t == 4] = [x + y for x, y in zip([tau * x for x in mu], [(1 - tau) * x for x in gam])]
+
+    pdfs = [multivariate_normal(mean, sigma_sq * np.eye(2)) for mean in means]
+
+    likelihoods = [dist.logpdf(element) for dist, element in zip(pdfs, X)]
+
+    return np.sum(likelihoods) - np.log(sigma_sq)
 
 
 def joint_posterior_density(data, theta):
@@ -142,7 +199,6 @@ def fetch_data(data):
 
 def center_data(mu, gam, tau, data):
     """Apply hierarchical logic to center data given theta"""
-
     means_a = np.repeat(mu, 4, axis=0)
     means_b = np.repeat(gam, 4, axis=0)
     means_c = 0.5 * np.repeat(mu, 8, axis=0) + 0.5 * np.repeat(gam, 8, axis=0)
