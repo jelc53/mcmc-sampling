@@ -8,21 +8,13 @@ import pandas as pd
 import scipy.stats as st
 # from autograd import grad
 
-from common import negative_log_prob, center_data
+from common import center_data, fetch_data, log_likelihood, negative_log_prob
 from common import generate_traceplots, generate_posterior_histograms
-
-# X = np.array(data[['X1', 'X2']])
-# t = np.array(data[['group']]).flatten()
-# means = np.zeros_like(X)
-# means[t == 1] = mu
-# means[t == 2] = gam
-# means[t == 3] = [x + y for x, y in zip([0.5 * x for x in mu], [0.5 * x for x in gam])]
-# means[t == 4] = [x + y for x, y in zip([tau * x for x in mu], [(1 - tau) * x for x in gam])]
 
 
 def dVdq(data, theta):
     """Compute gradient wrt theta"""
-    X = np.array(data[['X1', 'X2']])
+    X, t = fetch_data(data)
     n, k = X.shape
 
     sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
@@ -37,18 +29,19 @@ def dVdq(data, theta):
     grad[0] = (n + 1) / sigma_sq - (1/(2*sigma_sq**2))*sum_sq_cd
 
     # gradient wrt tau
-    grad[1] = (1/sigma_sq) * np.sum(centered_data[16:], axis=0) @ (gam - mu)
+    beta_term = (1-20)/tau + 2/(1-tau)
+    grad[1] = beta_term + (1/sigma_sq) * np.sum(centered_data[16:], axis=0) @ (gam - mu)
 
     # gradient wrt mu
-    grad[2:4] = -(np.sum((centered_data[0:4]), axis=0) +
-                  np.sum((centered_data[8:16]) * (0.5), axis=0) +
-                  np.sum((centered_data[16:]) * (tau), axis=0)
+    grad[2:4] = -(np.sum(centered_data[0:4], axis=0) +
+                  0.5*np.sum(centered_data[8:16], axis=0) +
+                  tau*np.sum(centered_data[16:], axis=0)
                   ) / sigma_sq
 
     # gradient wrt gam
     grad[4:6] = -(np.sum(centered_data[4:8], axis=0) +
-                  np.sum(centered_data[8:16] * (0.5), axis=0) +
-                  np.sum(centered_data[16:] * (1-tau), axis=0)
+                  0.5*np.sum(centered_data[8:16], axis=0) +
+                  (1-tau)*np.sum(centered_data[16:], axis=0)
                   ) / sigma_sq
 
     return grad
@@ -59,17 +52,17 @@ def q_update(q, p, M_mat, step_size):
     q_prop = q + step_size * np.linalg.inv(M_mat) @ p
 
     # check bounds
-    if q_prop[0] < 0:
-        p[0] = -p[0]
-        q_prop[0] = -q_prop[0]
+    # if q_prop[0] < 0:
+    #     p[0] = -p[0]
+    #     q_prop[0] = -q_prop[0]
 
-    if q_prop[1] < 0:
-        p[1] = -p[1]
-        q_prop[1] = -q_prop[1]
+    # if q_prop[1] > 1:
+    #     p[1] = -p[1]
+    #     q_prop[1] = -q_prop[1]
 
-    if q_prop[1] > 1:
-        p[1] = -p[1]
-        q_prop[1] = 1 - (q_prop[1]-1)
+    # if q_prop[1] < 0:
+    #     p[1] = -p[1]
+    #     q_prop[1] = 1 - (q_prop[1]-1)
 
     return q_prop, p
 
@@ -115,11 +108,14 @@ def hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, pat
         )
 
         # check metropolis acceptance criterion
-        curr = negative_log_prob(data, samples[-1]) - (0.5/m)*np.linalg.norm(p0,2)**2
-        prop = negative_log_prob(data, q_new) - (0.5/m)*np.linalg.norm(p_new,2)**2
-        alpha = min(0, prop/curr)
+        curr_u = - log_likelihood(data, samples[-1]) - st.beta(a=20, b=3).logpdf(samples[-1][1])
+        prop_u = - log_likelihood(data, q_new) - st.beta(a=20, b=3).logpdf(q_new[1])
+        curr_k = (0.5/m)*np.linalg.norm(p0,2)**2
+        prop_k = (0.5/m)*np.linalg.norm(p_new,2)**2
+        log_hratio = curr_u - prop_u + curr_k - prop_k
+        accept_log_prob = min(0, log_hratio)
 
-        if np.random.uniform(0, 1) < alpha:
+        if np.log(np.random.uniform(0, 1)) <= accept_log_prob:
             samples.append(q_new)
             accept_count += 1
         else:
@@ -140,7 +136,7 @@ if __name__ == '__main__':
     np.random.seed(42)
     initial_position = np.array([
         1.,  # sigma
-        0.5,  # tau
+        0.8,  # tau
         -1.25,  # mu1
         -0.5,  # mu2
         -0.25,  # gam1
@@ -150,8 +146,8 @@ if __name__ == '__main__':
     n_samples = 5000
     burn_in = 200
     path_len = 1
-    m = 5
-    step_size = 0.005
+    m = 1
+    step_size = 0.01
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)

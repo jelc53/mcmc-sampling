@@ -6,7 +6,7 @@ import arviz
 import numpy as np
 import pandas as pd
 
-from scipy.stats import truncnorm, invgamma
+from scipy.stats import truncnorm, invgamma, multivariate_normal
 from common import fetch_data, fetch_data_for_group, fetch_param_for_group
 from common import generate_traceplots, generate_posterior_histograms
 
@@ -41,9 +41,10 @@ def sample_tau_conditional_posterior(data, theta):
     n_4 = yi_4.shape[0]
 
     denom = n_4*(np.linalg.norm(mu-gam, 2)**2)
-    mean_vec = yi_4 @ mu - gam @ gam - yi_4 @ gam - mu @ gam
+    # mean_vec = yi_4 @ mu - gam @ gam - yi_4 @ gam - mu @ gam
+    mean_vec = np.dot(yi_4 - gam, mu - gam)
     mean = np.sum(mean_vec) / denom
-    std = sigma_sq / denom
+    std = np.sqrt(sigma_sq / denom)
 
     # sample truncated normal
     bounds = (0, 1)
@@ -56,8 +57,7 @@ def sample_tau_conditional_posterior(data, theta):
 
 def sample_mu_conditional_posterior(data, theta):
     """Sample from mu|theta[-1] conditional posterior"""
-    sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
-    # mu = np.array([mu1, mu2])
+    sigma_sq, tau, _, _, gam1, gam2 = theta
     gam = np.array([gam1, gam2])
 
     # fetch data
@@ -65,54 +65,45 @@ def sample_mu_conditional_posterior(data, theta):
     y_1, y_3, y_4 = X[t==1], X[t==3], X[t==4]
     n_1, n_3, n_4 = len(y_1), len(y_3), len(y_4)
 
-    # group 1
-    mean_1 = y_1
+    # group means
     alpha_1 = 1
+    alpha_3 = 0.5
+    alpha_4 = tau
 
-    # group 3
-    # mean_3 = 0.5*y_3 - 0.25*gam
-    mean_3 = 2*y_3 - gam
-    alpha_3 = 0.5**2
-
-    # group 4
-    # mean_4 = 0.25*tau*y_4 - 0.5*tau*(1-tau)*gam
-    mean_4 = (y_4 - (1-tau)*gam) / tau
-    alpha_4 = tau**2
+    mean_1 = y_1 * alpha_1
+    mean_3 = (y_3 - 0.5*gam) * alpha_3
+    mean_4 = (y_4 - (1-tau)*gam) * alpha_4
 
     # compute mean, std
-    w_134 = alpha_1*n_1 + alpha_3*n_3 + alpha_4*n_4
-    mean = np.sum([alpha_1*np.sum(mean_1, axis=0), alpha_3*np.sum(mean_3, axis=0), alpha_4*np.sum(mean_4, axis=0)], axis=0) / w_134
+    w_134 = (alpha_1**2)*n_1 + (alpha_3**2)*n_3 + (alpha_4**2)*n_4
+    mean = np.sum(np.vstack((mean_1, mean_3, mean_4)), axis=0) / w_134
     cov = sigma_sq / w_134 * np.eye(2)
 
-    return np.random.multivariate_normal(mean, cov)
+    return multivariate_normal.rvs(mean, cov)
 
 
 def sample_gam_conditional_posterior(data, theta):
     """Sample from gam|theta[-1] conditional posterior"""
-    sigma_sq, tau, mu1, mu2, gam1, gam2 = theta
+    sigma_sq, tau, mu1, mu2, _, _ = theta
     mu = np.array([mu1, mu2])
-    # gam = np.array([gam1, gam2])
 
     # fetch data
     X, t = fetch_data(data)
     y_2, y_3, y_4 = X[t==2], X[t==3], X[t==4]
     n_2, n_3, n_4 = len(y_2), len(y_3), len(y_4)
 
-    # group 2
-    mean_2 = y_2
+    # group means
     alpha_2 = 1
+    alpha_3 = 0.5
+    alpha_4 = 1 - tau
 
-    # group 3
-    mean_3 = 0.5*y_3 - 0.25*mu
-    alpha_3 = 0.5**2
-
-    # group 4
-    mean_4 = 0.25*tau*y_4 - 0.5*tau*(1-tau)*mu
-    alpha_4 = tau**2
+    mean_2 = y_2 * alpha_2
+    mean_3 = (y_3 - 0.5*mu) * alpha_3
+    mean_4 = (y_4 - tau*mu) * alpha_4
 
     # compute mean, std
-    w_234 = alpha_2*n_2 + alpha_3*n_3 + alpha_4*n_4
-    mean = np.sum([alpha_2*np.sum(mean_2, axis=0), alpha_3*np.sum(mean_3, axis=0), alpha_4*np.sum(mean_4, axis=0)], axis=0) / w_234
+    w_234 = (alpha_2**2)*n_2 + (alpha_3**2)*n_3 + (alpha_4**2)*n_4
+    mean = np.sum(np.vstack((mean_2, mean_3, mean_4)), axis=0) / w_234
     cov = sigma_sq / w_234 * np.eye(2)
 
     return np.random.multivariate_normal(mean, cov)
@@ -183,13 +174,13 @@ if __name__ == '__main__':
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
 
-    # samples, accept_ratio = gibbs_sampling(data, n_samples, initial_position)
-    # arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
-    # ess = arviz.ess(arviz_data_format)
-    # print('Acceptance ratio: {}'.format(accept_ratio))
-    # print('Number of effective samples: {}'.format(ess))
-    # print('Effective sample mean: {}'.format(ess.mean()))
-    # np.save('gibbs_samples.npy', samples)
-    samples = np.load('../output/gibbs_samples.npy')
+    samples, accept_ratio = gibbs_sampling(data, n_samples, initial_position)
+    arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
+    ess = arviz.ess(arviz_data_format)
+    print('Acceptance ratio: {}'.format(accept_ratio))
+    print('Number of effective samples: {}'.format(ess))
+    print('Effective sample mean: {}'.format(ess.mean()))
+    np.save('gibbs_samples.npy', samples)
+    # samples = np.load('../output/gibbs_samples.npy')
     generate_traceplots(samples[burn_in:], prefix='gibbs_')
     generate_posterior_histograms(samples[burn_in:], prefix='gibbs_')
