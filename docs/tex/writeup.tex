@@ -93,14 +93,18 @@ we have (e.g. $\tau \in [0,1]$), and (c) choosing hyperparameters (step
 size, burn-in).
 
 \begin{enumerate}[label=(\alph*)]
-\item \textbf{Proposal selection}: If possible, we would like to pick a symmetric 
-proposal distribution to sample from (which implies a symmetric transition 
-kernel) since this will simplify computation and guarantee detail balance. 
-I used a gaussian random step with mean equal to the step size and variance 
-of 1 which worked well (achieved reasonable acceptance ratio of 0.4-0.5).
+\item \textbf{Proposal selection}: Tried two methods: symmetric with constraints
+imposed as part of acceptance criteria, and asymmetric with constraints encoded 
+into proposal distributions.
+
+The symmetric method was attractive from an implementation perspective, since 
+it would guarantee detail balance (symmetric transition kernel) and therefore 
+simplify our hastings ratio to $\frac{\pi(y, \theta_1)}{\pi(y,\theta_0)}$ since 
+$q(\theta_0, \theta_1)=q(\theta_1, \theta_0)$. I picked a gaussian random step 
+with mean equal to step size and variance of 1.
 
 \begin{python}
-    def proposal_sampler(curr_theta, step_size):
+def proposal_sampler(curr_theta, step_size):
     num_params = len(curr_theta)
 
     while True:
@@ -113,17 +117,34 @@ of 1 which worked well (achieved reasonable acceptance ratio of 0.4-0.5).
     return proposal
 \end{python}
 
-Note: If this choice had not worked so well, I would have tried non-symmetric 
-options that better mimic the expected behaviour of $tau$ and $sigma^2$ parameters
-given their constraints.
+The asymmetric method made use of truncated normals that directly encoded 
+the bounds of our problem in the proposal distributions. This required that 
+I also solve for an asymmetric transition kernel and evaluate the full 
+hastings ratio, but the resulting algorithm was much more efficient (see 
+constraints section below).
+\begin{python}
+def proposal_sampler(curr_theta, step_size):
+    proposed = np.zeros_like(curr_theta)
+    a, b = (0 - proposed[0])/step_size, (np.inf - proposed[0])/step_size
+    c, d = (0 - proposed[1])/step_size, (1 - proposed[1])/step_size
+
+    proposed[0] = truncnorm(a, b, proposed[0], step_size).rvs()
+    proposed[1] = truncnorm(c, d, proposed[1], step_size).rvs()
+    proposed[2] = norm(proposed[2], step_size).rvs()
+    proposed[3] = norm(proposed[3], step_size).rvs()
+    proposed[4] = norm(proposed[4], step_size).rvs()
+    proposed[5] = norm(proposed[5], step_size).rvs()
+
+    return proposal
+\end{python}
 
 \item \textbf{Enforcing constraints}: We had two constraints to consider: (a) $\sigma^2 > 0$ 
-and (b) $0 \le \tau \le 1$. I enforce these constraints in the proposal sampler function 
-but simply resampling if the proposal violates either (a) or (b). Note, this would be 
-problematic (i.e. lead to us collecting biased posterior samples) if these constraints were 
-often binding, however, we can see in the results below (figure 1) that neither $\sigma^2$ 
-nor $\tau$ have maximum likelihoods or significant probability density near their boundaries 
-and so the biased-ness we introduce will be minimal. 
+and (b) $0 \le \tau \le 1$. I enforce these constraints for our symmetric proposal method by resampling 
+if the proposal violates either (a) or (b). This reduces the efficiency (acceptance ratio) of 
+the algorithm substantially and introduces potential bias in our resulting marginal posterior 
+samples (particularly for $\tau$ which has significant density near its upper bound, mean shifted 
+from ~0.75 to ~0.85). By contrast, our asymmetric proposal method encodes these constraints directly. 
+For these reasons, we use the asymmetric kernel for our results.
 
 \item \textbf{Hyperparameters}: There are not many hyperparameters to 
 tune for Metropolis-Hastings, which is one of its advantages! I 
@@ -131,9 +152,9 @@ experimented with different step sizes (0.01, 0.05, 0.1, 0.5),
 and for each computed the acceptance ratio and number of 
 effective (uncorrelated) samples for 300 sample test (after 
 burn-in). I choose a step size of 0.05 since it maximized 
-number of effective samples.
+both number of effective samples and acceptance ratio.
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \begin{tabular}{lllll}
         Step size                   & 0.01 & 0.05  & 0.1   & 0.5   \\
@@ -148,17 +169,18 @@ or burn-in (fixed at 200 to match what I saw in textbook examples).
 \end{enumerate}
 
 \textbf{Results}: Using the above design choices, we produce the following 
-samples from our posterior (figure 1). These passed basic 
-sense checks, such as $\sigma^2$ and $\tau$ falling within 
-their respective bounds, lower variance as we increase number 
-of samples, and minimal density on boundary of $\tau$ as hoped.
+samples from our posterior (figure 1) and compute the first and second 
+moments (table below). These passed basic sense checks, such as $\sigma^2$ 
+and $\tau$ falling within their respective bounds, mean and variance matching 
+results from other sampling algorithms, and lower variance as we increase number 
+of samples.
 \begin{figure}[H]
     \centering
     \includegraphics[scale=0.55]{mh_sampled_histogram.png}
     \caption{Histogram of Metropolis-Hastings posterior samples}
 \end{figure}
 
-\begin{table}[]
+\begin{table}[H]
     \begin{tabular}{lcccccc}
     \multicolumn{1}{c}{}          & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
     Mean of posterior samples     & 0.14  & 0.84  & -1.44 & -0.67 & -0.25 & 0.35  \\
@@ -169,7 +191,7 @@ of samples, and minimal density on boundary of $\tau$ as hoped.
 The traceplots in figure 2 give an indication of how well the sampler 
 explored the posterior density. I am comforted by the fact that 
 there are no long periods of repeated values (getting stuck) 
-despite an acceptance rate of only 0.45.
+despite an acceptance rate of only 0.44.
 \begin{figure}[H]
     \centering
     \includegraphics[scale=0.55]{mh_sampled_traceplot.png}
@@ -242,9 +264,11 @@ def leapfrog(q, p, data, M_mat, path_len, step_size):
 
     # momentum flip at end
     return q, -p
+\end{python}
 
-def hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len=1):
-    samples = [initial_position]
+\begin{python}
+def hamiltonian_monte_carlo(n_samples, initial_position, m, step_size, path_len):
+    samples, theta = [], inital_position
     size = (n_samples,) + initial_position.shape[:1]
     M_mat = np.eye(len(initial_position)) * m
     momentum = st.norm(0, m)
@@ -252,7 +276,7 @@ def hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, pat
     for p0 in momentum.rvs(size=size):
         # integrate over our path to get new position and momentum
         q_new, p_new = leapfrog(
-            samples[-1],
+            theta,
             p0,
             data,
             M_mat=M_mat,
@@ -261,12 +285,17 @@ def hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, pat
         )
 
         # check metropolis acceptance criterion
-        curr = joint_posterior_density(data, samples[-1]) * np.exp(-(0.5/m)*np.linalg.norm(p0,2)**2)
-        prop = joint_posterior_density(data, q_new) * np.exp(-(0.5/m)*np.linalg.norm(p_new,2)**2)
-        alpha = min(1, prop/curr)
+        curr_u = -log_likelihood(data, theta) #- beta(20, 3).logpdf(theta[1])
+        prop_u = -log_likelihood(data, q_new) #- beta(20, 3).logpdf(q_new[1])
+        curr_k = (0.5/m)*np.linalg.norm(p0,2)**2
+        prop_k = (0.5/m)*np.linalg.norm(p_new,2)**2
+        log_hratio = curr_u - prop_u + curr_k - prop_k
+        accept_log_prob = min(0, log_hratio)
 
-        if np.random.uniform(0, 1) < alpha:
+        if np.log(np.random.uniform(0, 1)) <= accept_log_prob:
             samples.append(q_new)
+            accept_count += 1
+            theta = q_new
         else:
             samples.append(np.copy(samples[-1]))
 
@@ -287,11 +316,17 @@ helped to correct for errors introduced via numerical
 integration.
 
 \item \textbf{Enforcing constraints}: We had two constraints to consider: 
-(a) $\sigma^2 > 0$ and (b) $0 \le \tau \le 1$. I enforce these 
+(a) $\sigma^2 > 0$ and (b) $0 \le \tau \le 1$. I experimented with 
+two methods of enforcing these constraints: boundary reflection (from 
+particle physics applications) and imposing a beta prior on $\tau$.
+
+For the boundary reflection method, I enforce these 
 constraints in the q ($\theta$) update function by creating a 
 "hard wall" or barrier, where we assume both $p$ (momentum) and 
-$q$ (parameter $\theta$) are reversed (flip sign) by same magnitude 
-that they surpassed the constraint.
+$q$ (parameter $\theta$) are reflected (flip sign) by same magnitude 
+that they surpassed the constraint. While this method did seem to work 
+(resulting posterior marginals had similar first and second moments), it 
+was less efficient (lower effective acceptance ratio).  
 
 \begin{python}
 def q_update(q, p, M_mat, step_size):
@@ -309,6 +344,15 @@ def q_update(q, p, M_mat, step_size):
 
     return q_prop, p
 \end{python}
+
+Imposing a beta prior on $\tau$ ($\text{Beta}(20,3)$) not only encoded the 
+constraints we wanted into our problem but also made the resulting joint 
+posterior space differentiable, and therefore easier to traverse and sample 
+from with gradient steps. This was the method I ended up using to produce my 
+results. Note, this requied we both update our log likelihood and gradient 
+calculations to reflect the new beta prior (rather than Unif[0,1]).
+$$ V(\theta) = \frac{nk}{2} \log 2\pi + (n+1) \log \sigma^2 + \frac{1}{2\sigma^2} \sum_{i=1}^n y_i'^T \mathbb{I}^{-1} y_i' + \log({\text{B}(\alpha, \beta)}) - \log(\tau^{\alpha-1}(1-\tau)^{\beta-1}) $$
+$$ \frac{\partial V(\theta)}{\partial \tau} = \frac{1}{\sigma^2} \cdot (\gamma - \mu)^T \sum_{t_i=4} y_i' + \frac{1-20}{\tau} + \frac{2}{1-\tau} $$ 
 
 \item \textbf{Hyperparameters}: I experimented with different step 
 sizes (0.005, 0.01) and momentum variance values (1, 5, 10). 
@@ -333,7 +377,7 @@ so I did not test further in this direction.
     \end{tabular}
 \end{table}
 
-I did not investigate varying initialization (used $[1., 0.5, 0., 0., 0., 0.]$), 
+I did not investigate varying initialization (used $[1., 0.8, 0., 0., 0., 0.]$), 
 burn-in (fixed at 200 to match what I saw in textbook examples) or path length
 (used 1 as set number of leapfrog steps eual to path length / step size).
 \end{enumerate}
@@ -346,7 +390,7 @@ samples from our posterior (figure 3).
     \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
 \end{figure}
 
-\begin{table}[]
+\begin{table}[H]
     \begin{tabular}{lcccccc}
     \multicolumn{1}{c}{}          & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
     Mean of posterior samples     & 0.13  & 0.88  & -1.42 & -0.65 & -0.28 & 0.33  \\
@@ -367,8 +411,8 @@ despite us not implementing no-turn logic.
 \textbf{Final remarks}. HMC was much slower to run than Metropolis-
 Hastings due to the gradient evaluation at each iteration (4,205 sec 
 for 5000 samples), however, our acceptance ratio was much higher 
-(approx. 0.95 vs 0.45). Moreover, our samples were far less likely 
-to be autocorrelated (approx. 46 vs 5 effective samples per 100 
+(approx. ~0.85 vs ~0.45). Moreover, our samples were far less likely 
+to be autocorrelated (approx. 32 vs 5 effective samples per 100 
 iterations). This is because we are taking directed rather than 
 random steps through the posterior.
 
@@ -402,7 +446,7 @@ Derive conditional distribution for $\tau$.
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \left( n_4 \tau^2 - 2\tau \vec{i}^T \sum_{t_i=4} \alpha_i \right) \right) && \\
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{n_4 \|\gamma - \mu\|^2_2}{\sigma^2} \left(\tau - \frac{\sum_{t_i=4} \alpha_i}{n_4} \right)^2 \right) && \text{complete the square}
 \end{align*}
-$$\therefore \tau | y, \theta[-\tau] \sim \text{TruncNormal}\left(\frac{\sum_{t_i=4} \alpha_i}{n_4}, \frac{\sigma^2}{n_4 \|\gamma - \mu\|^2_2}, 0, 1\right) \quad \text{where } \alpha_i = y_i^T \mu - \gamma^T\gamma - y_i^T\gamma - \mu^T\gamma$$
+$$\therefore \tau | y, \theta[-\tau] \sim \text{TruncNormal}\left(\frac{\sum_{t_i=4} \alpha_i}{n_4}, \frac{\sigma^2}{n_4 \|\gamma - \mu\|^2_2}, 0, 1\right) \quad \text{where } \alpha_i = (y_i - \gamma)^T (\mu - \gamma) $$
 
 Derive conditional distribution for $\mu$.
 \begin{align*}
@@ -411,9 +455,9 @@ Derive conditional distribution for $\mu$.
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} \left(\|\mu\|^2_2 - 2\mu^T \bar{\mu}_i^{t_i} + \|\bar{\mu}_i^{t_i}\|^2_2 \right)\right) && \text{$\|\bar{\mu}_i^{t_i}\|^2_2$ constant}\\
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_1 + 0.5^2 n_3 + \tau^2 n_4)\|\mu\|^2_2 - 2\mu^T \sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i} \right)\right) && \text{take $\|\mu\|^2_2$ outside sum}\\
         & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_1 + 0.5^2 n_3 + \tau^2 n_4}{\sigma^2} && \text{complete the square} \\
-        & \quad \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i}}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right)^T \mathbb{I}^{-1} \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i}}{n_1 + 0.5^2 n_3 + tau^2 n_4} \right)\biggr) && \\
-    \therefore \mu | y, \theta[-\mu] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i}}{n_1 + 0.5^2 n_3 + \tau^2 n_4}, \quad \frac{\sigma^2}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right) \\
-    \text{where} & \quad \bar{\mu}_i^{t=1} = y_i \text{;} \quad \bar{\mu}_i^{t=3} = (y_i - 0.5\gamma) / 0.5 \text{;} \quad \bar{\mu}_i^{t=4} = (y_i - (1-\tau)\gamma) / \tau 
+        & \quad \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right)^T \mathbb{I}^{-1} \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + tau^2 n_4} \right)\biggr) && \\
+    \therefore \mu | y, \theta[-\mu] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + \tau^2 n_4}, \quad \frac{\sigma^2}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right) \\
+    \text{where} & \quad \bar{\mu}_i^{t=1} = y_i \text{;} \quad \bar{\mu}_i^{t=3} = 0.5(y_i - 0.5\gamma) \text{;} \quad \bar{\mu}_i^{t=4} = \tau(y_i - (1-\tau)\gamma) 
 \end{align*}
 
 Derive conditional distribution for $\gamma$.
@@ -423,9 +467,9 @@ Derive conditional distribution for $\gamma$.
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} \left(\|\gamma\|^2_2 - 2\gamma^T \bar{\gamma}_i^{t_i} + \|\bar{\gamma}_i^{t_i}\|^2_2 \right)\right) \\ %&& \text{$\|\bar{\gamma}_i^{t_i}\|^2_2$ constant}\\
         & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4)\|\gamma\|^2_2 - 2\gamma^T \sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i} \right)\right) \\ %&& \text{take $\|\gamma\|^2_2$ outside sum}\\
         & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}{\sigma^2} \\ %&& \text{complete the square} \\
-        & \quad \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)^T \mathbb{I}^{-1} \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)\biggr) && \\
-    \therefore \gamma | y, \theta[-\gamma] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}, \quad \frac{\sigma^2}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right) \\
-    \text{where} & \quad \bar{\gamma}_i^{t=2} = y_i \text{;} \quad \bar{\gamma}_i^{t=3} = (y_i - 0.5\mu) / 0.5 \text{;} \quad \bar{\gamma}_i^{t=4} = (y_i - \tau\mu) / (1-\tau) 
+        & \quad \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)^T \mathbb{I}^{-1} \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)\biggr) && \\
+    \therefore \gamma | y, \theta[-\gamma] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}, \quad \frac{\sigma^2}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right) \\
+    \text{where} & \quad \bar{\gamma}_i^{t=2} = y_i \text{;} \quad \bar{\gamma}_i^{t=3} = 0.5(y_i - 0.5\mu) \text{;} \quad \bar{\gamma}_i^{t=4} = (1-\tau) (y_i - \tau\mu)
 \end{align*}
 
 Having derived our conditional distributions, the gibbs implementation
@@ -482,7 +526,9 @@ updates for each).
 and $\gamma_1, \gamma_2$ would always come from the same 
 distribution I found it more efficient to update these together, 
 drawing from a 2-dim multivariate normal rather than separately. 
-This does mean that our proposals
+This will not work well if the parameters within each block are 
+uncorrelated but that should not be the case for this problem since 
+the components of mu and gamma are closely related.
 \end{enumerate}
 
 \textbf{Results}: Using the above design choices, we produce the following 
@@ -493,10 +539,10 @@ samples from our posterior (figure 5).
     \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
 \end{figure}
 
-\begin{table}[]
+\begin{table}[H]
     \begin{tabular}{lcccccc}
     \multicolumn{1}{c}{}          & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
-    Mean of posterior samples     & 0.12  & 0.85  & -1.44 & -0.66 & -0.26 & 0.32  \\
+    Mean of posterior samples     & 0.13  & 0.85  & -1.45 & -0.66 & -0.26 & 0.32  \\
     Variance of posterior samples & 0.001 & 0.008 & 0.016 & 0.014 & 0.022 & 0.024
     \end{tabular}
 \end{table}
@@ -668,15 +714,12 @@ $$ \mathbb{E_{\theta \sim p}}[I_A(\theta)] = \frac{1}{n} \sum_j I_A(\theta_i) \f
     \end{tabular}
 \end{table}
 
-\textbf{Final remarks}. Fast, because extremely parallelizable ...
-...
-
-\section{Comparison of methodologies} Autocorrelation, speed to evaluate, sample efficiency,
- biased estimator, ...table!
- 
- Remember beta prior for HMC tau is good bc differentiable everywhere ... alternative is wall reflection (particle physics) 
- Remember MH truncnorm (non-symmetric transition kernel) is better than extra rejection criteria for constraints
- Add mean and variance (first and second moments) to all analyses
-
+\textbf{Final remarks}. While the Importance Sampling algorithm could be highly parallelized 
+(each sample is independent) we needed to run many more samples than other methods (1,000,000 
+vs 5,000) to sufficiently cover our desire regions for the marginal posterior plot. Moreover, 
+the algorithm was VERY senstivie to the closeness of our proposal distribution $q$. In this 
+case we were able to compute a good closed form approximation from groups 1 and 2, but one 
+could imagine this not generalizing well to problems with more data or more complex 
+parameterizations.  
 
 \end{document}
