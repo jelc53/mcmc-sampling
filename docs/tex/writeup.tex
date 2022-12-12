@@ -345,14 +345,14 @@ def q_update(q, p, M_mat, step_size):
     return q_prop, p
 \end{python}
 
-Imposing a beta prior on $\tau$ ($\text{Beta}(20,3)$) not only encoded the 
+Imposing a beta prior on $\tau$ ($\text{Beta}(\alpha=20,\beta=3)$) not only encoded the 
 constraints we wanted into our problem but also made the resulting joint 
 posterior space differentiable, and therefore easier to traverse and sample 
 from with gradient steps. This was the method I ended up using to produce my 
 results. Note, this requied we both update our log likelihood and gradient 
 calculations to reflect the new beta prior (rather than Unif[0,1]).
 $$ V(\theta) = \frac{nk}{2} \log 2\pi + (n+1) \log \sigma^2 + \frac{1}{2\sigma^2} \sum_{i=1}^n y_i'^T \mathbb{I}^{-1} y_i' + \log({\text{B}(\alpha, \beta)}) - \log(\tau^{\alpha-1}(1-\tau)^{\beta-1}) $$
-$$ \frac{\partial V(\theta)}{\partial \tau} = \frac{1}{\sigma^2} \cdot (\gamma - \mu)^T \sum_{t_i=4} y_i' + \frac{1-20}{\tau} + \frac{2}{1-\tau} $$ 
+$$ \frac{\partial V(\theta)}{\partial \tau} = \frac{1}{\sigma^2} \cdot (\gamma - \mu)^T \sum_{t_i=4} y_i' + \frac{1-\alpha}{\tau} + \frac{\beta -1}{1-\tau} $$ 
 
 \item \textbf{Hyperparameters}: I experimented with different step 
 sizes (0.005, 0.01) and momentum variance values (1, 5, 10). 
