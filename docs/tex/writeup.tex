@@ -695,18 +695,18 @@ use a normalized scheme, and (c) choice of prior for $\tau$.
         \textrm{ define  }\quad& M_{\mu, \gamma} = \sum_{t_i=1}\lVert y_i - \overline{Y_1} \rVert^2 + \sum_{t_i=2}\lVert y_i - \overline{Y_2} \rVert^2\\
             & \propto \; (M_{\mu, \gamma} + n_1\lVert \overline{Y_1} - \mu \rVert^2 + n_2\lVert \overline{Y_2} - \gamma \rVert^2)^{-(n_1 + n_2)}\\
             & \propto \; \left(M_{\mu, \gamma} + \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]^T \left(\begin{matrix*} n_1 & 0 & 0 & 0 \\ 0 & n_1 & 0 & 0 \\ 0 & 0 & n_2 & 0 \\ 0 & 0 & 0 & n_2 \end{matrix*}\right) \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]\right)^{-(n_1 + n_2)}\\
-            & \propto \; \biggl(1 + \frac{2(n_1 + n_2) - 4}{M_{\mu, \gamma}(2(n_1 + n_2) - 4)}\left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]^T \left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right)^{-1} \\
+            & \propto \; \biggl(1 + \frac{2(n_1 + n_2) - 4}{M_{\mu, \gamma} \cdot 2(n_1 + n_2) - 4}\left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]^T \left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right)^{-1} \\
             & \quad \quad \quad \left[\left(\begin{matrix}\mu\\ \gamma\end{matrix}\right) - \left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\right]\biggr)^{-(n_1 + n_2)}\\
             & \propto \; \left[1 + \frac{1}{\nu}(x - \eta)^T\Sigma^{-1}(x - \eta)\right]^{-\frac{\nu + 4}{2}} \quad \text{recognize t-distribution density}\\
         \text{ where }\quad& \nu=2(n_1 + n_2) - 4, \Sigma=\frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*} n_1{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2{-1} & 0 \\ 0 & 0 & 0 & n_2{-1} \end{matrix*}\right), \eta=\left(\begin{matrix*}\overline{Y_1}\\ \overline{Y_2}\end{matrix*}\right)\\
-        \therefore p(\mu, \gamma \mid Y_{1,2}) &\sim t_4\left(\left(\begin{matrix*}
+        \therefore p(\mu, \gamma \mid Y_{1,2}) &\sim t_{2(n_1 + n_2) - 4}\left(\left(\begin{matrix*}
             \overline{Y_1}\\ \overline{Y_2} \end{matrix*}\right), \frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*}
             n_1^{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2^{-1} & 0 \\ 0 & 0 & 0 & n_2^{-1}
             \end{matrix*}\right)\right)
     \end{align*}
 
-    Putting these parts together we have the following proposal distribution,
-    $$ q(\theta) \sim t_4\left(\left(\begin{matrix*}
+    Putting these parts together we have the following proposal distribution $q(\theta)$,
+    $$ t_{2(n_1 + n_2) - 4}\left(\left(\begin{matrix*}
         \overline{Y_1}\\ \overline{Y_2} \end{matrix*}\right), \frac{M_{\mu, \gamma}}{2(n_1 + n_2) - 4}\left(\begin{matrix*}
         n_1^{-1} & 0 & 0 & 0 \\ 0 & n_1^{-1} & 0 & 0 \\ 0 & 0 & n_2^{-1} & 0 \\ 0 & 0 & 0 & n_2^{-1}
         \end{matrix*}\right)\right) \cdot \text{InvGamma}\left(n_1+n_2, \quad \frac{M_{\sigma^2}}{2} \right) $$
