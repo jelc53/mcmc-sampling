@@ -9,7 +9,7 @@ import scipy.stats as st
 # from autograd import grad
 
 from common import center_data, fetch_data, log_likelihood, negative_log_prob
-from common import generate_traceplots, generate_posterior_histograms
+from common import generate_traceplots, generate_posterior_histograms, plot_acorr
 
 
 def dVdq(data, theta):
@@ -29,7 +29,7 @@ def dVdq(data, theta):
     grad[0] = (n + 1) / sigma_sq - (1/(2*sigma_sq**2))*sum_sq_cd
 
     # gradient wrt tau
-    beta_term = (1-20)/tau + 2/(1-tau)
+    beta_term = (1-20)/tau + (3-1)/(1-tau)
     grad[1] = beta_term + (1/sigma_sq) * np.sum(centered_data[16:], axis=0) @ (gam - mu)
 
     # gradient wrt mu
@@ -143,8 +143,8 @@ if __name__ == '__main__':
         0.3  # gam2
     ])
 
-    n_samples = 600
-    burn_in = 100
+    n_samples = 20000
+    burn_in = 200
     path_len = 1
     m = 1
     step_size = 0.01
@@ -164,7 +164,11 @@ if __name__ == '__main__':
     # samples, accept_ratio = hamiltonian_monte_carlo(data, n_samples, initial_position, m, step_size, path_len)
     # np.save('hmc_samples.npy', samples)
     samples = np.load('../output/hmc_samples.npy')
+    ess_out = arviz.ess(arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6)))
     print('Mean of posterior samples: {}'.format(np.mean(samples, axis=0)))
     print('Variance of posterior samples: {}'.format(np.var(samples, axis=0)))
+    print('Number of effective samples: {}'.format(ess_out))
+
+    plot_acorr(samples[burn_in:], nlags=1000, prefix='hmc_')
     generate_traceplots(samples[burn_in:], prefix='hmc_')
     generate_posterior_histograms(samples[burn_in:], prefix='hmc_')

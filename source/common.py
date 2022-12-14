@@ -2,6 +2,7 @@ import os
 import math
 
 import numpy as np
+import statsmodels.api as sm
 import matplotlib.pyplot as plt
 
 from scipy.stats import multivariate_normal
@@ -14,6 +15,23 @@ def log_normal(x, mu=0, sigma=1):
     denominator = sigma * np.sqrt(2*np.pi)
 
     return np.sum(np.log(numerator/denominator))
+
+
+# plot autocorrelation
+def plot_acorr(xt, nlags=2500, prefix='mh_'):
+    theta_labels = ['sigma_sq', 'tau', 'mu1', 'mu2', 'gam1', 'gam2']
+
+    plt.subplots(figsize=(12, 6))
+
+    for i in range(xt.shape[1]):
+        plt.plot(sm.tsa.acf(xt[:,i], nlags=nlags), alpha=0.75, label=theta_labels[i])
+
+    plt.legend()
+    plt.xlabel('lag')
+    # plt.title('auto-correlation')
+    outfile = prefix + 'autocorr_plot.png'
+    plt.savefig(os.path.join(os.path.pardir, 'output', outfile))
+    plt.show(); plt.close()
 
 
 def prepare_histogram_sample_data(theta, w):

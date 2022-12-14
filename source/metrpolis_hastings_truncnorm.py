@@ -5,10 +5,9 @@ import arviz
 
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 
-from common import log_likelihood
 from scipy.stats import truncnorm, norm
+from common import log_likelihood, plot_acorr
 from common import generate_traceplots, generate_posterior_histograms
 
 
@@ -102,7 +101,7 @@ if __name__ == '__main__':
     ])
 
     step_size = 0.05
-    n_samples = 5000
+    n_samples = 20000
     burn_in = 200
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
@@ -119,7 +118,12 @@ if __name__ == '__main__':
     # samples, accept_ratio = metropolis_hastings(data, n_samples, step_size, initial_position)
     # np.save('mh_samples_truncnorm.npy', samples)
     samples = np.load('../output/mh_samples.npy')
+
+    ess_out = arviz.ess(arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6)))
     print('Mean of posterior samples: {}'.format(np.mean(samples, axis=0)))
     print('Variance of posterior samples: {}'.format(np.var(samples, axis=0)))
+    print('Number of effective samples: {}'.format(ess_out))
+
+    plot_acorr(samples[burn_in:], nlags=1000, prefix='mh_')
     generate_traceplots(samples[burn_in:], prefix='mh_')
     generate_posterior_histograms(samples[burn_in:], prefix='mh_')

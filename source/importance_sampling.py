@@ -1,13 +1,14 @@
 import os
 import sys
 import time
+import arviz
 
 import numpy as np
 import pandas as pd
-import scipy.stats as st
 
 from scipy.stats import multivariate_t, invgamma, beta
-from common import fetch_data, prepare_histogram_sample_data, generate_posterior_barcharts
+from common import plot_acorr, fetch_data, generate_traceplots
+from common import prepare_histogram_sample_data, generate_posterior_barcharts
 
 
 def fetch_invgam_params(data, mu, gam):
@@ -139,13 +140,18 @@ if __name__ == '__main__':
     # samples, weights_u = multistep_importance_sampling(data, num_raw_samples, initial_position)
     # np.save('mis_samples.npy', samples); np.save('mis_weights_u.npy', weights_u)
     samples = np.load('../output/mis_samples.npy'); weights_u = np.load('../output/mis_weights_u.npy')
+
     w = weights_u / np.sum(np.sum(weights_u))
     theta_hat = samples * np.reshape(w, (w.shape[0],1))
     variance = np.sum(np.square(samples - np.mean(samples, axis=0)) * np.reshape(w, (w.shape[0],1)), axis=0)
+    ess_out = arviz.ess(arviz.convert_to_dataset(theta_hat.reshape(1,-1,6)))
     print('Mean of weighted samples: {}'.format(np.sum(theta_hat, axis=0)))
     print('Variance of weighted samples: {}'.format(variance))
+    print('Number of effective samples: {}'.format(ess_out))
     # np.save('mis_weighted_samples.npy', theta_hat)
 
+    plot_acorr(theta_hat, nlags=1000, prefix='mis_')
+    generate_traceplots(theta_hat, prefix='mis_')
     vals, bins = prepare_histogram_sample_data(samples, w)
     generate_posterior_barcharts(vals, bins, prefix='mis_')
     # weighted_idx = np.random.choice(samples.shape[0], size=num_weighted_samples, p=weights/np.sum(weights))

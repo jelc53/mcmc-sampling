@@ -8,7 +8,7 @@ import pandas as pd
 
 from scipy.stats import truncnorm, invgamma, multivariate_normal
 from common import fetch_data, fetch_data_for_group, fetch_param_for_group
-from common import generate_traceplots, generate_posterior_histograms
+from common import generate_traceplots, generate_posterior_histograms, plot_acorr
 
 
 def sample_sigma_sq_conditional_posterior(data, theta):
@@ -168,22 +168,21 @@ if __name__ == '__main__':
         0.3  # gam2
     ])
 
-    n_samples = 5000
+    n_samples = 20000
     burn_in = 200
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)
 
     # samples, accept_ratio = gibbs_sampling(data, n_samples, initial_position)
-    # arviz_data_format = arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6))
-    # ess = arviz.ess(arviz_data_format)
-    # print('Acceptance ratio: {}'.format(accept_ratio))
-    # print('Number of effective samples: {}'.format(ess))
-    # print('Effective sample mean: {}'.format(ess.mean()))
     # np.save('gibbs_samples.npy', samples)
-
     samples = np.load('../output/gibbs_samples.npy')
+
+    ess_out = arviz.ess(arviz.convert_to_dataset(samples[burn_in:].reshape(1,-1,6)))
     print('Mean of posterior samples: {}'.format(np.mean(samples, axis=0)))
     print('Variance of posterior samples: {}'.format(np.var(samples, axis=0)))
+    print('Number of effective samples: {}'.format(ess_out))
+
+    plot_acorr(samples[burn_in:], nlags=1000, prefix='gibbs_')
     generate_traceplots(samples[burn_in:], prefix='gibbs_')
     generate_posterior_histograms(samples[burn_in:], prefix='gibbs_')

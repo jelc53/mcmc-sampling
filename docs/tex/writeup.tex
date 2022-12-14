@@ -49,6 +49,8 @@ For all sampling methodologies, I computed 5000 samples with a
 burn-in of 200. The rest (step size, momentum, proposals, etc.) I 
 discuss and treat as design choices.
 
+
+% \newpage
 \section{Metropolis Hastings}
 To implement the Metropolis-Hastings algorithm we require the 
 joint and transition densities to compute the hastings ratio. 
@@ -169,7 +171,7 @@ or burn-in (fixed at 200 to match what I saw in textbook examples).
 \end{enumerate}
 
 \textbf{Results}: Using the above design choices, we produce the following 
-samples from our posterior (figure 1) and compute the first and second 
+samples from our posterior (Figure 1) and compute the first and second 
 moments (table below). These passed basic sense checks, such as $\sigma^2$ 
 and $\tau$ falling within their respective bounds, mean and variance matching 
 results from other sampling algorithms, and lower variance as we increase number 
@@ -177,25 +179,39 @@ of samples.
 \begin{figure}[H]
     \centering
     \includegraphics[scale=0.55]{mh_sampled_histogram.png}
+    \vspace*{-10mm}
     \caption{Histogram of Metropolis-Hastings posterior samples}
 \end{figure}
 
 \begin{table}[H]
     \begin{tabular}{lcccccc}
-    \multicolumn{1}{c}{}          & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
+    \multicolumn{1}{c}{}          & sigma$^2$ & tau   & mu1   & mu2   & gam1  & gam2  \\
     Mean of posterior samples     & 0.14  & 0.84  & -1.44 & -0.67 & -0.25 & 0.35  \\
     Variance of posterior samples & 0.004 & 0.008 & 0.015 & 0.023 & 0.022 & 0.025
     \end{tabular}
 \end{table}
 
-The traceplots in figure 2 give an indication of how well the sampler 
-explored the posterior density. I am comforted by the fact that 
-there are no long periods of repeated values (getting stuck) 
-despite an acceptance rate of only 0.44.
+The traceplots in Figure 2 indicate how well the sampler 
+explored the posterior density. I am comforted that it explored the 
+relavent regions without long periods of repeated values (getting stuck).
 \begin{figure}[H]
     \centering
     \includegraphics[scale=0.55]{mh_sampled_traceplot.png}
+    \vspace*{-10mm}
     \caption{Traceplot for Metropolis-Hastings sampling}
+    % \ref{}
+\end{figure}
+
+Figure 5 plots auto-correlation of our posterior samples. As expected 
+for Metropolis-Hasting, we observe significant auto-correlation between 
+samples, resulting in a low number of "effective samples" relative 
+to other algorithms ($\text{n}_{\text{eff}}: \sigma^2=484, \tau=100, \mu_1=48, \mu_2=58, \gamma_1=52, \gamma_2=26$ 
+for 5,000 samples).
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.6]{mh_autocorr_plot.png}
+    \vspace*{-10mm}
+    \caption{Auto-correlation for Metropolis-Hastings algorithm}
 \end{figure}
 
 \textbf{Final remarks}. Metropolis-Hastings is simple to implement 
@@ -206,6 +222,169 @@ more directed paths through the posterior space (e.g. HMC).
 
 
 
+% \newpage
+\section{Gibbs Sampling}
+To implement the Gibbs Sampling we need to derive the conditional 
+distributions for each parameter from which to sample. 
+
+\textbf{Conditional distributions} Idea: start with joint posterior 
+density, then remove constants (e.g. terms with only fixed parameters) 
+and rearrange to derive density conditional distribution we can sample 
+from. To simplify notation, let $\theta[-x]$ represent all parameters 
+of $\theta$ exluding parameter $x$ and let $y_i'$ represent centered data 
+(e.g. $y_1' = y_1 - \mu$). \newline
+
+Derive conditional distribution for $\sigma^2$.
+\begin{align*}
+    p(\sigma^2|y,\theta[-\sigma^2]) & \propto \prod_{t_i=1} N(\mu, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=2} N(\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=3} N(0.5\mu + 0.5\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=4} N(\tau\mu + (1-\tau)\gamma, \sigma^2 \mathbb{I}) \cdot p(\sigma^2) \\
+        & \propto |\sigma^2 \mathbb{I}_2|^{-n/2} \cdot \frac{1}{\sigma^2} \cdot \exp\left(-\frac{1}{2\sigma^2}\sum_{i=1}^n y_i'^T \mathbb{I}^{-1} y_i'\right) \\
+        & \propto (\frac{1}{\sigma^2})^{n+1} \cdot \exp\left(-\frac{1}{\sigma^2} \cdot \frac{1}{2} \sum_{i=1}^n \|y_i'\|^2_2\right) \\
+        & = x^{\alpha + 1} \cdot \exp(-x \beta) \\
+    \therefore \sigma^2 | y, \theta[-\sigma^2] & \sim \text{InvGamma}\left(n, \quad \frac{1}{2} \sum_{i=1}^n \|y_i'\|^2_2\right)
+\end{align*}
+
+Derive conditional distribution for $\tau$.
+\begin{align*}
+    p(\tau|y,\theta[-\tau]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i=4} (y_i - (\tau\mu + (1-\tau)\gamma))^T \mathbb{I}^{-1} (y_i - (\tau\mu + (1-\tau)\gamma)) \right)\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \sum_{t_i=4} (\tau \vec{i} - \alpha_i)^T \mathbb{I}^{-1} (\tau \vec{i} - \alpha_i) \right) && \text{let $\vec{i} = (1, 1)$} \\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \sum_{t_i=4} \left( \|\tau \vec{i}\|^2_2 - 2\tau \vec{i}^T \alpha_i + \|\alpha_i\|^2_2\right) \right) && \text{$\|\alpha_i\|^2_2$ constant} \\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \left( n_4 \tau^2 - 2\tau \vec{i}^T \sum_{t_i=4} \alpha_i \right) \right) && \\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{n_4 \|\gamma - \mu\|^2_2}{\sigma^2} \left(\tau - \frac{\sum_{t_i=4} \alpha_i}{n_4} \right)^2 \right) && \text{complete the square}
+\end{align*}
+$$\therefore \tau | y, \theta[-\tau] \sim \text{TruncNormal}\left(\frac{\sum_{t_i=4} \alpha_i}{n_4}, \frac{\sigma^2}{n_4 \|\gamma - \mu\|^2_2}, 0, 1\right) \quad \text{where } \alpha_i = (y_i - \gamma)^T (\mu - \gamma) $$
+
+Derive conditional distribution for $\mu$.
+\begin{align*}
+    p(\mu|y,\theta[-\mu]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{1,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) && \text{$\bar{y}_i$ = group mean}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} (\mu - \bar{\mu}_i^{t_i})^T \mathbb{I}^{-1} (\mu - \bar{\mu}_i^{t_i}) \right) && \text{rearrange for $\mu$}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} \left(\|\mu\|^2_2 - 2\mu^T \bar{\mu}_i^{t_i} + \|\bar{\mu}_i^{t_i}\|^2_2 \right)\right) && \text{$\|\bar{\mu}_i^{t_i}\|^2_2$ constant}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_1 + 0.5^2 n_3 + \tau^2 n_4)\|\mu\|^2_2 - 2\mu^T \sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i} \right)\right) && \text{take $\|\mu\|^2_2$ outside sum}\\
+        & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_1 + 0.5^2 n_3 + \tau^2 n_4}{\sigma^2} && \text{complete the square} \\
+        & \quad \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right)^T \mathbb{I}^{-1} \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right)\biggr) && \\
+    \therefore \mu | y, \theta[-\mu] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + \tau^2 n_4}, \quad \frac{\sigma^2}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right) \\
+    \text{where} & \quad \bar{\mu}_i^{t=1} = y_i \text{;} \quad \bar{\mu}_i^{t=3} = 0.5(y_i - 0.5\gamma) \text{;} \quad \bar{\mu}_i^{t=4} = \tau(y_i - (1-\tau)\gamma) 
+\end{align*}
+
+Derive conditional distribution for $\gamma$.
+\begin{align*}
+    p(\gamma|y,\theta[-\gamma]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{2,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) \\ %&& \text{$\bar{y}_i$ = group mean}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} (\gamma - \bar{\gamma}_i^{t_i})^T \mathbb{I}^{-1} (\gamma - \bar{\gamma}_i^{t_i}) \right) \\ %&& \text{rearrange for $\gamma$}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} \left(\|\gamma\|^2_2 - 2\gamma^T \bar{\gamma}_i^{t_i} + \|\bar{\gamma}_i^{t_i}\|^2_2 \right)\right) \\ %&& \text{$\|\bar{\gamma}_i^{t_i}\|^2_2$ constant}\\
+        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4)\|\gamma\|^2_2 - 2\gamma^T \sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i} \right)\right) \\ %&& \text{take $\|\gamma\|^2_2$ outside sum}\\
+        & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}{\sigma^2} \\ %&& \text{complete the square} \\
+        & \quad \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)^T \mathbb{I}^{-1} \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)\biggr) && \\
+    \therefore \gamma | y, \theta[-\gamma] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}, \quad \frac{\sigma^2}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right) \\
+    \text{where} & \quad \bar{\gamma}_i^{t=2} = y_i \text{;} \quad \bar{\gamma}_i^{t=3} = 0.5(y_i - 0.5\mu) \text{;} \quad \bar{\gamma}_i^{t=4} = (1-\tau) (y_i - \tau\mu)
+\end{align*}
+
+Having derived our conditional distributions, the gibbs implementation
+itself is very straightforward. We iterate through and update one or 
+multiple parameters at a time (see below).  
+\begin{python}
+def gibbs_sampling(data, n_samples, initial_position):
+    samples = [initial_position]
+
+    it = 0
+    while it < n_samples:
+        it += 1
+        curr_theta = samples[-1].copy()
+        idx = (it-1) % 4  # systematic
+
+        if idx == 0:
+            sigma_sq_proposal = sample_ssq_conditional_posterior(data, curr_theta)
+            curr_theta[0] = sigma_sq_proposal
+
+        elif idx == 1:
+            tau_proposal = sample_tau_conditional_posterior(data, curr_theta)
+            curr_theta[1] = tau_proposal
+
+        elif idx == 2:
+            mu_proposal = sample_mu_conditional_posterior(data, curr_theta)
+            curr_theta[2:4] = mu_proposal
+
+        elif idx == 3:
+            gam_proposal = sample_gam_conditional_posterior(data, curr_theta)
+            curr_theta[4:6] = gam_proposal
+
+        else:
+            print("Error: trying to update out-of-bounds parameter!")
+        samples.append(curr_theta)
+
+    return np.array(samples)
+\end{python}
+
+The Gibbs Sampling algorithm has a number of design 
+choices, including (a) systematic vs random scan, and
+(b) block vs individual parameter updates. Note: there 
+is no hyperparameter tuning for step size here because 
+we take a completely new sample (from an adaptive proposal 
+distribution) at each step.
+
+\begin{enumerate}[label=(\alph*)]
+\item \textbf{Systematic vs random scan}: While random scan ensures 
+detail balance of our markov chain, I preferred to use a 
+systematic scan since it was more efficient, especially over 
+smaller sampling experiments (guarantees an equal number of 
+updates for each).
+
+\item \textbf{Block updates for mu and gamma}: Since $\mu_1, \mu_2$ 
+and $\gamma_1, \gamma_2$ would always come from the same 
+distribution I found it more efficient to update these together, 
+drawing from a 2-dim multivariate normal rather than separately. 
+This will not work well if the parameters within each block are 
+uncorrelated but that should not be the case for this problem since 
+the components of mu and gamma are closely related.
+\end{enumerate}
+
+\textbf{Results}: Using the above design choices, we produce the following 
+samples from our posterior (figure 5).
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.55]{gibbs_sampled_histogram.png}
+    \vspace*{-10mm}
+    \caption{Histogram of Gibbs posterior samples}
+\end{figure}
+
+\begin{table}[H]
+    \begin{tabular}{lcccccc}
+    \multicolumn{1}{c}{}          & sigma$^2$ & tau   & mu1   & mu2   & gam1  & gam2  \\
+    Mean of posterior samples     & 0.13  & 0.85  & -1.45 & -0.66 & -0.26 & 0.32  \\
+    Variance of posterior samples & 0.001 & 0.008 & 0.016 & 0.014 & 0.022 & 0.024
+    \end{tabular}
+\end{table}
+
+The traceplots in Figure 5 indicate how well the sampler explored the 
+posterior density. I am comforted that it explored the relevant regions 
+without long periods of repeated values.  
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.55]{gibbs_sampled_traceplot.png}
+    \vspace*{-10mm}
+    \caption{Traceplot for Gibbs sampling algorithm}
+\end{figure}
+
+Figure 6 plots auto-correlation of our posterior samples. As hoped
+for Gibbs Sampling, we observed much less auto-correlation between 
+samples than for Metropolis-Hastings, resulting in a higher 
+set of "effective samples" ($\text{n}_{\text{eff}}: \sigma^2=1,025, \tau=674, \mu_1=735, \mu_2=840, \gamma_1=1,018, \gamma_2=934$ 
+for 5,000 samples).
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.6]{gibbs_autocorr_plot.png}
+    \vspace*{-10mm}
+    \caption{Auto-correlation for Gibbs sampling algorithm}
+\end{figure}
+
+\textbf{Final remarks}. The Gibbs sampling algorithm is lightning 
+fast compared to MH and HMC (25.0 sec!). This is because it does 
+not execute an acceptance criterion! The main tradeoff is that our 
+samples have significant autocorrelation (approx. 16 effective 
+samples per 100 iterations). Note, the number of effective samples 
+still surpasses MH but is almost 1/3 of our HMC result.
+
+
+
+% \newpage
 \section{Hamiltonian Monte Carlo} 
 To implement the Hamiltonian Monte Carlo we need to compute 
 the Hamiltonian $H(\rho, \theta)$ given independently drawn momentum 
@@ -387,185 +566,59 @@ samples from our posterior (figure 3).
 \begin{figure}[H]
     \centering
     \includegraphics[scale=0.55]{hmc_sampled_histogram.png}
+    \vspace*{-10mm}
     \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
 \end{figure}
 
 \begin{table}[H]
     \begin{tabular}{lcccccc}
-    \multicolumn{1}{c}{}          & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
+    \multicolumn{1}{c}{}          & sigma$^2$ & tau   & mu1   & mu2   & gam1  & gam2  \\
     Mean of posterior samples     & 0.13  & 0.88  & -1.42 & -0.65 & -0.28 & 0.33  \\
     Variance of posterior samples & 0.001 & 0.003 & 0.013 & 0.012 & 0.024 & 0.022
     \end{tabular}
 \end{table}
 
-The traceplots in figure 4 give an indication of how well the sampler 
-explored the posterior density. I am comforted by the fact that 
-there are no long periods of repeated values (getting stuck) 
-despite us not implementing no-turn logic. 
+The traceplots in Figure 8 indicate how well the sampler explored the 
+posterior density. I am comforted that it explored the relevant regions 
+without long periods of repeated values. If this had not been the case, 
+we might have considered a no u-turn variant of the HMC sampling algorithm. 
 \begin{figure}[H]
     \centering
     \includegraphics[scale=0.55]{hmc_sampled_traceplot.png}
+    \vspace*{-10mm}
     \caption{Traceplot for Hamiltonian Monte Carlo sampling}
 \end{figure}
 
-\textbf{Final remarks}. HMC was much slower to run than Metropolis-
-Hastings due to the gradient evaluation at each iteration (4,205 sec 
-for 5000 samples), however, our acceptance ratio was much higher 
-(approx. ~0.85 vs ~0.45). Moreover, our samples were far less likely 
-to be autocorrelated (approx. 32 vs 5 effective samples per 100 
-iterations). This is because we are taking directed rather than 
-random steps through the posterior.
-
-
-
-\section{Gibbs Sampling}
-To implement the Gibbs Sampling we need to derive the conditional 
-distributions for each parameter from which to sample. 
-
-\textbf{Conditional distributions} Idea: start with joint posterior 
-density, then remove constants (e.g. terms with only fixed parameters) 
-and rearrange to derive density conditional distribution we can sample 
-from. To simplify notation, let $\theta[-x]$ represent all parameters 
-of $\theta$ exluding parameter $x$ and let $y_i'$ represent centered data 
-(e.g. $y_1' = y_1 - \mu$). \newline
-
-Derive conditional distribution for $\sigma^2$.
-\begin{align*}
-    p(\sigma^2|y,\theta[-\sigma^2]) & \propto \prod_{t_i=1} N(\mu, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=2} N(\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=3} N(0.5\mu + 0.5\gamma, \sigma^2 \mathbb{I}) \cdot \prod_{t_i=4} N(\tau\mu + (1-\tau)\gamma, \sigma^2 \mathbb{I}) \cdot p(\sigma^2) \\
-        & \propto |\sigma^2 \mathbb{I}_2|^{-n/2} \cdot \frac{1}{\sigma^2} \cdot \exp\left(-\frac{1}{2\sigma^2}\sum_{i=1}^n y_i'^T \mathbb{I}^{-1} y_i'\right) \\
-        & \propto (\frac{1}{\sigma^2})^{n+1} \cdot \exp\left(-\frac{1}{\sigma^2} \cdot \frac{1}{2} \sum_{i=1}^n \|y_i'\|^2_2\right) \\
-        & = x^{\alpha + 1} \cdot \exp(-x \beta) \\
-    \therefore \sigma^2 | y, \theta[-\sigma^2] & \sim \text{InvGamma}\left(n, \quad \frac{1}{2} \sum_{i=1}^n \|y_i'\|^2_2\right)
-\end{align*}
-
-Derive conditional distribution for $\tau$.
-\begin{align*}
-    p(\tau|y,\theta[-\tau]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i=4} (y_i - (\tau\mu + (1-\tau)\gamma))^T \mathbb{I}^{-1} (y_i - (\tau\mu + (1-\tau)\gamma)) \right)\\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \sum_{t_i=4} (\tau \vec{i} - \alpha_i)^T \mathbb{I}^{-1} (\tau \vec{i} - \alpha_i) \right) && \text{let $\vec{i} = (1, 1)$} \\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \sum_{t_i=4} \left( \|\tau \vec{i}\|^2_2 - 2\tau \vec{i}^T \alpha_i + \|\alpha_i\|^2_2\right) \right) && \text{$\|\alpha_i\|^2_2$ constant} \\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{\|\gamma - \mu\|^2_2}{\sigma^2} \left( n_4 \tau^2 - 2\tau \vec{i}^T \sum_{t_i=4} \alpha_i \right) \right) && \\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{n_4 \|\gamma - \mu\|^2_2}{\sigma^2} \left(\tau - \frac{\sum_{t_i=4} \alpha_i}{n_4} \right)^2 \right) && \text{complete the square}
-\end{align*}
-$$\therefore \tau | y, \theta[-\tau] \sim \text{TruncNormal}\left(\frac{\sum_{t_i=4} \alpha_i}{n_4}, \frac{\sigma^2}{n_4 \|\gamma - \mu\|^2_2}, 0, 1\right) \quad \text{where } \alpha_i = (y_i - \gamma)^T (\mu - \gamma) $$
-
-Derive conditional distribution for $\mu$.
-\begin{align*}
-    p(\mu|y,\theta[-\mu]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{1,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) && \text{$\bar{y}_i$ = group mean}\\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} (\mu - \bar{\mu}_i^{t_i})^T \mathbb{I}^{-1} (\mu - \bar{\mu}_i^{t_i}) \right) && \text{rearrange for $\mu$}\\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{1,3,4\}} \left(\|\mu\|^2_2 - 2\mu^T \bar{\mu}_i^{t_i} + \|\bar{\mu}_i^{t_i}\|^2_2 \right)\right) && \text{$\|\bar{\mu}_i^{t_i}\|^2_2$ constant}\\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_1 + 0.5^2 n_3 + \tau^2 n_4)\|\mu\|^2_2 - 2\mu^T \sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{t_i} \right)\right) && \text{take $\|\mu\|^2_2$ outside sum}\\
-        & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_1 + 0.5^2 n_3 + \tau^2 n_4}{\sigma^2} && \text{complete the square} \\
-        & \quad \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right)^T \mathbb{I}^{-1} \left(\mu - \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + tau^2 n_4} \right)\biggr) && \\
-    \therefore \mu | y, \theta[-\mu] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{1,3,4\}} \bar{\mu}_i^{\{t_i\}}}{n_1 + 0.5^2 n_3 + \tau^2 n_4}, \quad \frac{\sigma^2}{n_1 + 0.5^2 n_3 + \tau^2 n_4} \right) \\
-    \text{where} & \quad \bar{\mu}_i^{t=1} = y_i \text{;} \quad \bar{\mu}_i^{t=3} = 0.5(y_i - 0.5\gamma) \text{;} \quad \bar{\mu}_i^{t=4} = \tau(y_i - (1-\tau)\gamma) 
-\end{align*}
-
-Derive conditional distribution for $\gamma$.
-\begin{align*}
-    p(\gamma|y,\theta[-\gamma]) & \propto \exp\left(-\frac{1}{2\sigma^2} \sum_{t_i \in \{2,3,4\}} (y_i - \bar{y}_i)^T \mathbb{I}^{-1} (y_i - \bar{y}_i) \right) \\ %&& \text{$\bar{y}_i$ = group mean}\\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} (\gamma - \bar{\gamma}_i^{t_i})^T \mathbb{I}^{-1} (\gamma - \bar{\gamma}_i^{t_i}) \right) \\ %&& \text{rearrange for $\gamma$}\\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \sum_{t_i \in \{2,3,4\}} \left(\|\gamma\|^2_2 - 2\gamma^T \bar{\gamma}_i^{t_i} + \|\bar{\gamma}_i^{t_i}\|^2_2 \right)\right) \\ %&& \text{$\|\bar{\gamma}_i^{t_i}\|^2_2$ constant}\\
-        & \propto \exp\left(-\frac{1}{2} \cdot \frac{1}{\sigma^2} \left((n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4)\|\gamma\|^2_2 - 2\gamma^T \sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{t_i} \right)\right) \\ %&& \text{take $\|\gamma\|^2_2$ outside sum}\\
-        & \propto \exp\biggl(-\frac{1}{2} \cdot \frac{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}{\sigma^2} \\ %&& \text{complete the square} \\
-        & \quad \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)^T \mathbb{I}^{-1} \left(\gamma - \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right)\biggr) && \\
-    \therefore \gamma | y, \theta[-\gamma] & \sim \text{Normal}\left( \frac{\sum_{t_i \in \{2,3,4\}} \bar{\gamma}_i^{\{t_i\}}}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4}, \quad \frac{\sigma^2}{n_2 + 0.5^2 n_3 + (1-\tau)^2 n_4} \right) \\
-    \text{where} & \quad \bar{\gamma}_i^{t=2} = y_i \text{;} \quad \bar{\gamma}_i^{t=3} = 0.5(y_i - 0.5\mu) \text{;} \quad \bar{\gamma}_i^{t=4} = (1-\tau) (y_i - \tau\mu)
-\end{align*}
-
-Having derived our conditional distributions, the gibbs implementation
-itself is very straightforward. We iterate through and update one or 
-multiple parameters at a time (see below).  
-\begin{python}
-def gibbs_sampling(data, n_samples, initial_position):
-    samples = [initial_position]
-
-    it = 0
-    while it < n_samples:
-        it += 1
-        curr_theta = samples[-1].copy()
-        idx = (it-1) % 4  # systematic
-
-        if idx == 0:
-            sigma_sq_proposal = sample_ssq_conditional_posterior(data, curr_theta)
-            curr_theta[0] = sigma_sq_proposal
-
-        elif idx == 1:
-            tau_proposal = sample_tau_conditional_posterior(data, curr_theta)
-            curr_theta[1] = tau_proposal
-
-        elif idx == 2:
-            mu_proposal = sample_mu_conditional_posterior(data, curr_theta)
-            curr_theta[2:4] = mu_proposal
-
-        elif idx == 3:
-            gam_proposal = sample_gam_conditional_posterior(data, curr_theta)
-            curr_theta[4:6] = gam_proposal
-
-        else:
-            print("Error: trying to update out-of-bounds parameter!")
-        samples.append(curr_theta)
-
-    return np.array(samples)
-\end{python}
-
-The Gibbs Sampling algorithm has a number of design 
-choices, including (a) systematic vs random scan, and
-(b) block vs individual parameter updates. Note: there 
-is no hyperparameter tuning for step size here because 
-we take a completely new sample (from an adaptive proposal 
-distribution) at each step.
-
-\begin{enumerate}[label=(\alph*)]
-\item \textbf{Systematic vs random scan}: While random scan ensures 
-detail balance of our markov chain, I preferred to use a 
-systematic scan since it was more efficient, especially over 
-smaller sampling experiments (guarantees an equal number of 
-updates for each).
-
-\item \textbf{Block updates for mu and gamma}: Since $\mu_1, \mu_2$ 
-and $\gamma_1, \gamma_2$ would always come from the same 
-distribution I found it more efficient to update these together, 
-drawing from a 2-dim multivariate normal rather than separately. 
-This will not work well if the parameters within each block are 
-uncorrelated but that should not be the case for this problem since 
-the components of mu and gamma are closely related.
-\end{enumerate}
-
-\textbf{Results}: Using the above design choices, we produce the following 
-samples from our posterior (figure 5).
+Figure 9 plots auto-correlation of our posterior samples. As hoped
+for HMC, we observe relatively low auto-correlation between 
+samples leading to a high number of "effective samples" ($\text{n}_{\text{eff}}: \sigma^2=1,825, \tau=1,556, \mu_1=192, \mu_2=206, \gamma_1=73, \gamma_2=55$ 
+for 5,000 samples). Interstingly, these auto-correlation results are 
+much better than Metropolis-Hastings (as expected), but worse than 
+Gibbs for some parameters. This might be improved by implementing the 
+no u-turn variant of the algorithm. 
 \begin{figure}[H]
     \centering
-    \includegraphics[scale=0.55]{gibbs_sampled_histogram.png}
-    \caption{Histogram of Hamiltonian Monte Carlo posterior samples}
+    \includegraphics[scale=0.6]{hmc_autocorr_plot.png}
+    \vspace*{-10mm}
+    \caption{Auto-correlation for Hamiltonian Monte Carlo algorithm}
 \end{figure}
 
-\begin{table}[H]
-    \begin{tabular}{lcccccc}
-    \multicolumn{1}{c}{}          & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
-    Mean of posterior samples     & 0.13  & 0.85  & -1.45 & -0.66 & -0.26 & 0.32  \\
-    Variance of posterior samples & 0.001 & 0.008 & 0.016 & 0.014 & 0.022 & 0.024
-    \end{tabular}
-\end{table}
-
-The traceplots in figure 6 give an indication of how well the sampler 
-explored the posterior density. I am comforted by the fact that 
-there are no long periods of repeated values (getting stuck) 
-despite us not implementing no-turn logic. 
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=0.55]{gibbs_sampled_traceplot.png}
-    \caption{Traceplot for Hamiltonian Monte Carlo sampling}
-\end{figure}
-
-\textbf{Final remarks}. The Gibbs sampling algorithm is lightning 
-fast compared to MH and HMC (25.0 sec!). This is because it does 
-not execute an acceptance criterion! The main tradeoff is that our 
-samples have significant autocorrelation (approx. 16 effective 
-samples per 100 iterations). Note, the number of effective samples 
-still surpasses MH but is almost 1/3 of our HMC result.
+\textbf{Final remarks}. HMC was VERY slow to run since it required 
+computing a gradient evaluation at each iteration (4,205 sec 
+for 5000 samples). Compared to Metropolis-Hastings, our acceptance ratio 
+was much higher (approx. ~0.85 vs ~0.45) and our samples were far less likely 
+to be autocorrelated. This is because we are taking directed rather than 
+truncated random walk steps through the posterior. The picture is 
+less clear when we compare to Gibbs Sampling. Gibbs has by defintion 
+a 100\% acceptance ratio, less to evaluate (very efficient) and in this 
+case achieved similar auto-correlation to our HMC algorithm. However, given 
+the increasing widespread use of HMC (e.g. implemented in stan), 
+I suspect that our algorithm would outperform Gibbs if tweaked to 
+avoid retracing steps (no u-turn variant).
 
 
 
+\newpage
 \section{Importance Sampling}
 
 Importance Sampling is typically used to estimate summary statistics. 
@@ -703,12 +756,13 @@ $$ \mathbb{E_{\theta \sim p}}[I_A(\theta)] = \frac{1}{n} \sum_j I_A(\theta_i) \f
 \begin{figure}[H]
     \centering
     \includegraphics[scale=0.55]{mis_sampled_histogram.png}
+    \vspace*{-10mm}
     \caption{Histogram of Importance Sampling posterior samples}
 \end{figure}
 
 \begin{table}[H]
     \begin{tabular}{lcccccc}
-    \multicolumn{1}{c}{}         & sigma & tau   & mu1   & mu2   & gam1  & gam2  \\
+    \multicolumn{1}{c}{}         & sigma$^2$ & tau   & mu1   & mu2   & gam1  & gam2  \\
     Mean of weighted samples     & 0.20  & 0.88  & -1.42 & -0.66 & -0.27 & 0.34  \\
     Variance of weighted samples & 0.022 & 0.004 & 0.020 & 0.077 & 0.044 & 0.058
     \end{tabular}
@@ -717,9 +771,62 @@ $$ \mathbb{E_{\theta \sim p}}[I_A(\theta)] = \frac{1}{n} \sum_j I_A(\theta_i) \f
 \textbf{Final remarks}. While the Importance Sampling algorithm could be highly parallelized 
 (each sample is independent) we needed to run many more samples than other methods (1,000,000 
 vs 5,000) to sufficiently cover our desire regions for the marginal posterior plot. Moreover, 
-the algorithm was VERY senstivie to the closeness of our proposal distribution $q$. In this 
+the algorithm was VERY sensitive to the closeness of our proposal distribution $q$. In this 
 case we were able to compute a good closed form approximation from groups 1 and 2, but one 
 could imagine this not generalizing well to problems with more data or more complex 
 parameterizations.  
+
+
+\newpage
+\section{Appendix}
+Results based on 5,000 samples for MH, Gibbs and HMC. 1,000,000 for Importance Sampling.
+\subsection{Number of effective samples}
+The following table compares effective sample number for each of the different algorithms. 
+Note that Importance Sampling has almost no auto-correlation (~100\% of samples are "effective") 
+since we sample independently from our proposal distribution. 
+\begin{table}[H]
+    \begin{tabular}{lcccccc}
+    \hline
+    \multicolumn{1}{c}{}         & $\text{N}_{\text{eff}}(\sigma^2)$ & $\text{N}_{\text{eff}}(\tau)$   & $\text{N}_{\text{eff}}(\mu_1)$   & $\text{N}_{\text{eff}}(\mu_2)$   & $\text{N}_{\text{eff}}(\gamma_1)$  & $\text{N}_{\text{eff}}(\gamma_1)$  \\
+    \hline
+    Metropolis Hastings          & 484   & 100   & 48    & 58    & 52    & 26    \\
+    Gibbs Sampling               & 1,025 & 674   & 735   & 840   & 1,018 & 934   \\
+    Hamiltonian Monte Carlo      & 1,824 & 1,556 & 192   & 206   & 73    & 55    \\  
+    Importance Sampling          & 9,952,000 & 9,953,000 & 9,952,000 & 9,952,000 & 9,955,000 & 9,967,000  \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\subsection{Mean of posterior samples}
+The following able compares mean of posterior samples for each of the different algorithms.
+\begin{table}[H]
+    \begin{tabular}{lcccccc}
+    \hline
+    \multicolumn{1}{c}{}         & $\mathbb{E}[\sigma^2]$ \quad & $\mathbb{E}[\tau]$ \quad   & $\mathbb{E}[\mu_1]$  \quad  & $\mathbb{E}[\mu_2]$  \quad  & $\mathbb{E}[\gamma_1]$ \quad  & $\mathbb{E}[\gamma_1]$  \\
+    \hline
+    Metropolis Hastings          & 0.14  & 0.84  & -1.44 & -0.67 & -0.25 & 0.35  \\
+    Gibbs Sampling               & 0.13  & 0.85  & -1.45 & -0.66 & -0.26 & 0.32  \\
+    Hamiltonian Monte Carlo      & 0.13  & 0.88  & -1.42 & -0.65 & -0.28 & 0.33  \\  
+    Importance Sampling          & 0.20  & 0.88  & -1.42 & -0.66 & -0.27 & 0.34  \\
+    \hline
+    \end{tabular}
+\end{table}
+
+
+
+\subsection{Variance of posterior samples}
+The following able compares variance of posterior samples for each of the different algorithms.
+\begin{table}[H]
+    \begin{tabular}{lcccccc}
+    \hline
+    \multicolumn{1}{c}{}         & $\text{Var}[\sigma^2]$ & $\text{Var}[\tau]$   & $\text{Var}[\mu_1]$   & $\text{Var}[\mu_2]$   & $\text{Var}[\gamma_1]$  & $\text{Var}[\gamma_1]$  \\
+    \hline
+    Metropolis Hastings          & 0.004 & 0.008 & 0.015 & 0.023 & 0.022 & 0.025 \\
+    Gibbs Sampling               & 0.001 & 0.008 & 0.016 & 0.014 & 0.022 & 0.024 \\
+    Hamiltonian Monte Carlo      & 0.001 & 0.003 & 0.013 & 0.012 & 0.024 & 0.022  \\  
+    Importance Sampling          & 0.022 & 0.004 & 0.020 & 0.077 & 0.044 & 0.058  \\
+    \hline
+    \end{tabular}
+\end{table}
 
 \end{document}
