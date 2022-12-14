@@ -143,11 +143,11 @@ if __name__ == '__main__':
         0.3  # gam2
     ])
 
-    n_samples = 20000
+    n_samples = 5000
     burn_in = 200
     path_len = 1
-    m = 1
-    step_size = 0.01
+    m = 5
+    step_size = 0.005
 
     file_path = os.path.join(os.path.pardir, 'data', infile)
     data = pd.read_csv(file_path)

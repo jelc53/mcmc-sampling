@@ -151,7 +151,7 @@ For these reasons, we use the asymmetric kernel for our results.
 \item \textbf{Hyperparameters}: There are not many hyperparameters to 
 tune for Metropolis-Hastings, which is one of its advantages! I 
 experimented with different step sizes (0.01, 0.05, 0.1, 0.5), 
-and for each computed the acceptance ratio and number of 
+and for each computed the acceptance ratio and mean number of 
 effective (uncorrelated) samples for 300 sample test (after 
 burn-in). I choose a step size of 0.05 since it maximized 
 both number of effective samples and acceptance ratio.
@@ -161,7 +161,7 @@ both number of effective samples and acceptance ratio.
     \begin{tabular}{lllll}
         Step size                   & 0.01 & 0.05  & 0.1   & 0.5   \\
         Acceptance ratio            & 0.87 & 0.44  & 0.22  & 0.02  \\
-        Mean effective samples      & 3.5  & 16.6  & 14.6  & 6.96  \\
+        Effective samples           & 3.5  & 16.6  & 14.6  & 6.96  \\
                                     &      &       &       &         
     \end{tabular}
 \end{table}
@@ -535,18 +535,18 @@ $$ \frac{\partial V(\theta)}{\partial \tau} = \frac{1}{\sigma^2} \cdot (\gamma -
 
 \item \textbf{Hyperparameters}: I experimented with different step 
 sizes (0.005, 0.01) and momentum variance values (1, 5, 10). 
-For each combination I computed the acceptance ratio and number of 
-effective (uncorrelated) samples for 500 sample test (after 
+For each combination I computed the acceptance ratio and 
+mean number of effective (uncorrelated) samples for 500 sample test (after 
 burn-in of 200). I choose a (step size, momentum) pair of 
-(0.01, 5) since it maximized number of effective samples while 
-maintaining reasonable acceptance. Note, for higher step sizes 
+(0.005, 5) since it maximized mean number of effective samples while 
+maintaining reasonable acceptance (> 80\%). Note, for higher step sizes 
 (e.g 0.05) my algorithm would run into numerical instability issues 
 so I did not test further in this direction.
 
 \begin{table}[H]
     \centering
     \begin{tabular}{llll}
-        Step size    & Momentum     & Accept ratio      & Mean eff. samples     \\
+        Step size    & Momentum     & Accept ratio      & Effective samples     \\
         0.005        & 1            & 0.97              & 138                   \\ 
         0.005        & 5            & 0.83              & 159                   \\
         0.005        & 10           & 0.80              & 30                    \\
@@ -591,7 +591,7 @@ we might have considered a no u-turn variant of the HMC sampling algorithm.
 
 Figure 9 plots auto-correlation of our posterior samples. As hoped
 for HMC, we observe relatively low auto-correlation between 
-samples leading to a high number of "effective samples" ($\text{n}_{\text{eff}}: \sigma^2=1,825, \tau=1,556, \mu_1=192, \mu_2=206, \gamma_1=73, \gamma_2=55$ 
+samples leading to a high number of "effective samples" ($\text{n}_{\text{eff}}: \sigma^2=1,825, \tau=1,556, \mu_1=392, \mu_2=406, \gamma_1=273, \gamma_2=255$ 
 for 5,000 samples). Interstingly, these auto-correlation results are 
 much better than Metropolis-Hastings (as expected), but worse than 
 Gibbs for some parameters. This might be improved by implementing the 
@@ -611,14 +611,14 @@ to be autocorrelated. This is because we are taking directed rather than
 truncated random walk steps through the posterior. The picture is 
 less clear when we compare to Gibbs Sampling. Gibbs has by defintion 
 a 100\% acceptance ratio, less to evaluate (very efficient) and in this 
-case achieved similar auto-correlation to our HMC algorithm. However, given 
-the increasing widespread use of HMC (e.g. implemented in stan), 
-I suspect that our algorithm would outperform Gibbs if tweaked to 
-avoid retracing steps (no u-turn variant).
+case achieved similar auto-correlation to our HMC algorithm. However, 
+I suspect the HMC algorithm would outperform Gibbs from an auto-
+correlation perspective if tweaked to avoid retracing steps (no u-turn 
+variant) and/or if our problem involved a higher-dimensional parameter space.
 
 
 
-\newpage
+% \newpage
 \section{Importance Sampling}
 
 Importance Sampling is typically used to estimate summary statistics. 
@@ -791,7 +791,7 @@ since we sample independently from our proposal distribution.
     \hline
     Metropolis Hastings          & 484   & 100   & 48    & 58    & 52    & 26    \\
     Gibbs Sampling               & 1,025 & 674   & 735   & 840   & 1,018 & 934   \\
-    Hamiltonian Monte Carlo      & 1,824 & 1,556 & 192   & 206   & 73    & 55    \\  
+    Hamiltonian Monte Carlo      & 1,824 & 1,556 & 392   & 406   & 273   & 255    \\  
     Importance Sampling          & 9,952,000 & 9,953,000 & 9,952,000 & 9,952,000 & 9,955,000 & 9,967,000  \\
     \hline
     \end{tabular}
