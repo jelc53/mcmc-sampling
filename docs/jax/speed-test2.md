@@ -438,7 +438,7 @@ high-performance implementations for `autograd`.
 **PyMC's NumPyro API speed test**:
 Using a model formulation and synthetic dataset taken from [Foreman-Mackey's blog](https://dfm.io/posts/intro-to-numpyro/) 
 I ran a short experiment to see if PyMC's API would incur meaningful overhead costs 
-when running  NumPyro's NUTS implementation ([jupyter nb](./numpyro.pdf)).
+when running  NumPyro's NUTS implementation ([jupyter nb](./numpyro_notebook.pdf)).
 
 
 |         | PyMC API | NumPyro | Speed-up |
