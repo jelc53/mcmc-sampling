@@ -1,0 +1,1 @@
+pandox -o [output_filename].pdf [input_filename].md --highlight-style tango
