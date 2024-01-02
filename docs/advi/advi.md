@@ -17,11 +17,20 @@ description: "Variational Inference is used to approximate joint posterior distr
 | Date published | January, 2017 |  
 |     |     |   
 
-Author note, ...
-Gelman involvement in HMC, NUTS, VI, etc. 
-History of VI goes far back but practical usage from Stan's ADVI is recent
+
+### Introduction
+
+Variational Inference, Laplace Approximation and Integrated Nested Laplace Approximation belong to a family of techniques that seek to approximate an intractable posterior distribution with a simpler, tractable distribution. In this sketch we focus on the practical implementation of Variational Inference (VI). 
+
+The first significant publication on VI applied to statistical inference was written in 1999 by Michael I. Jordan, Zoubin Ghahramani, Tommi S. Jaakkola and Lawrence K. Saul. Jordan et al introduced the idea that if one could find a well-chosen family of distributions, then inference could be reframed as an optimization problem where we search for the parameters (i.e. a specific member of this family) that minimize the Kullback-Leibler (KL) divergence between the true posterior and the proposed distribution.
+
+While not the original author, Andrew Gelman made significant contributions in exploring the limitations of VI and enabling its practical usage by combining the technique with Auto-Differentiation software libraries. Similarly, Gelman played a major role in the development of the No U-Turn Sampler (NUTS), including its implementation in the Stan programming language, which popularized and made practical Hamiltonian Monte Carlo (HMC) sampling.
+   
 
 ### Motivation
+
+Variational Inference is faster than traditional sampling methods ...
+
 
 Speed!! but concerns about accuracy ... 
 
